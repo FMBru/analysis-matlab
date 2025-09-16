@@ -1,0 +1,101 @@
+clear all
+close all
+
+%% loading merged table (with innerjoin), variables names and padArray
+
+load('\\eosproject-smb\eos\project\p\picosec\testbeam\2025_July_h4\Matlab\allPadsTable_innerjoin.mat');
+
+%% do crosstalk analysis
+
+store_folder = '\\eosproject-smb\eos\project\p\picosec\testbeam\2025_July_h4\Matlab\Multipad\Crosstalk';
+mkdir(store_folder);
+
+pad_window_length = 10;
+
+pad_centers_array = [75.5001307433340	77.3500290124409;
+                    75.6124092221265	67.2995888483077;
+                    65.3085740729141	77.4076156972731;
+                    65.3980427790669	67.1954622433600];
+
+full_geom.x_centroid = mean(pad_centers_array(:,1));
+full_geom.y_centroid = mean(pad_centers_array(:,2));
+full_geom.x_window_length = ceil(length(padArray)/2) * pad_window_length;
+full_geom.y_window_length = ceil(length(padArray)/2) * pad_window_length;
+full_geom.pad_window_length = pad_window_length;
+
+MCP_ampCut = allpads_table.MCP_amp >= 0.15 & allpads_table.MCP_amp > 0.01*max(allpads_table.MCP_amp) & allpads_table.MCP_amp < 0.99*max(allpads_table.MCP_amp);
+SATCut = abs(allpads_table.(['SAT' num2str(padArray(1))]) - median(allpads_table.(['SAT' num2str(padArray(1))]), 'omitnan')) < 10;
+riseTimeCut = abs(allpads_table.(['riseTime' num2str(padArray(1))]) - median(allpads_table.(['riseTime' num2str(padArray(1))]), 'omitnan')) < 10;
+
+for i=2:length(padArray)
+    SATCut = SATCut & (abs(allpads_table.(['SAT' num2str(padArray(i))]) - median(allpads_table.(['SAT' num2str(padArray(i))]), 'omitnan')) < 10);
+    riseTimeCut = riseTimeCut & abs(allpads_table.(['riseTime' num2str(padArray(i))]) - median(allpads_table.(['riseTime' num2str(padArray(i))]), 'omitnan')) < 10;
+end
+
+subset = allpads_table(MCP_ampCut & SATCut & riseTimeCut, :);
+[full_frame, full_table] = geometricalFrame(subset, full_geom, 1, 'center');
+
+% Compute counts map
+[~,~,countMap] = twoDimensionsMap(full_frame, ones(height(full_table),1));
+plotMap(full_frame, countMap);
+title('Count map full');
+pause(2)
+close;
+
+for i=1:length(padArray)
+    padExcluded = padArray;
+    padExcluded(i) = [];
+
+    %amplitude cuts on one pad to see what's on the others
+    mmAmpVec = full_table.(['MM_amp' num2str(padArray(i))]);
+
+    highAmpCut = mmAmpVec > 0.2 * max(mmAmpVec, [], 'omitnan');
+    %lowAmpCut = mmAmpVec < 0.2 * max(mmAmpVec, [], 'omitnan');
+
+    %geometrical cut on the pad
+    pad_x_center = pad_centers_array(i,1);
+    pad_y_center = pad_centers_array(i,2);
+
+    pad_window_left = pad_x_center - 0.5*full_geom.pad_window_length/2;
+    pad_window_right = pad_x_center + 0.5*full_geom.pad_window_length/2;
+    pad_window_up = pad_y_center + 0.5*full_geom.pad_window_length/2;
+    pad_window_bottom = pad_y_center - 0.5*full_geom.pad_window_length/2;
+
+    padCut = full_table.X > pad_window_left & full_table.X < pad_window_right & full_table.Y > pad_window_bottom & full_table.Y < pad_window_up;
+
+    cross_high_table = full_table(highAmpCut & padCut,:);
+    %cross_low_table = full_table(lowAmpCut & padCut,:);
+   
+    crossCopy = cross_high_table;
+
+    for j=1:length(padExcluded)
+        
+        padSelected = num2str(padArray(i));
+        padCrosstalk = num2str(padExcluded(j));
+
+        pad_folder = [store_folder '\pad' padCrosstalk];
+        mkdir(pad_folder);
+
+        cross_high_table = crossCopy;
+        satvar = cross_high_table.(['SAT' padCrosstalk]);
+        SATfiner = abs(satvar - mean(satvar, 'omitnan')) < 2;
+        cross_high_table = cross_high_table(SATfiner,:);
+        
+        %ratio between real signal and crosstalk
+        ratio_high = cross_high_table.(['MM_amp' padSelected]) ./ cross_high_table.(['MM_amp' padCrosstalk]);
+
+        distribution(cross_high_table.(['SAT' padCrosstalk]),100,['SAT-pad' padCrosstalk],'ns', pad_folder, ['-selecting-pad' padSelected], true); %SAT distribution (high Amp)
+        distribution(cross_high_table.(['MM_amp' padCrosstalk]),100,['Amplitude-pad' padCrosstalk],'V', pad_folder, ['-selecting-pad' padSelected], false); %amplitude distribution (high Amp)
+        distribution(cross_high_table.(['riseTime' padCrosstalk]),100,['riseTime-pad' padCrosstalk],'V', pad_folder, ['-selecting-pad' padSelected],true); %riseTime distribution (high Amp)
+
+        correlationPlots(cross_high_table.(['SAT' padCrosstalk]), ratio_high, ['SAT-pad' padCrosstalk], 'ns', ['Ratio-pad' padSelected '-by-pad' padCrosstalk], 'adim', pad_folder, ['-selecting-pad' padSelected], true);
+    
+    
+        %ratio_low = cross_low_table.(['MM_amp' padSelected]) ./ cross_low_table.(['MM_amp' padCrosstalk]);
+        %distribution(cross_low_table.(['SAT' padCrosstalk]),100,['SAT-lowCutOn' padSelected],'ns', pad_folder, padCrosstalk); %SAT distribution (low Amp)
+        %distribution(cross_low_table.(['MM_amp' padCrosstalk]),100,['Amplitude-lowCutOn' padSelected],'V', pad_folder, padCrosstalk); %amplitude distribution (low Amp)
+        %distribution(cross_low_table.(['riseTime' padCrosstalk]),100,['riseTime-lowCutOn' padSelected],'V', pad_folder, padCrosstalk); %riseTime distribution (low Amp)
+        %correlationPlots( cross_low_table.(['SAT' padCrosstalk]), ratio_low,  ['SAT-lowCutOn' padSelected], 'ns', ['Ratio-pad' padSelected 'by-pad' padCrosstalk], 'au', pad_folder, padCrosstalk);
+    
+    end
+end

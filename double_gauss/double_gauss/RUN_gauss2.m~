@@ -1,0 +1,193 @@
+clear all;
+close all;
+
+% Define the list of filenames to analyze
+filenames = {
+% Photocathode studies
+% "Run051_MM res 15 mm 200kOhm - 120 um - PC Ti 2p4 nm - Flushing - A275V C490V - MCP cut 150 mV + geo cut- SATlist.txt",
+% "Run052_MM res 15 mm 200kOhm - 120 um - PC Ti 2p4 nm - Flushing - A275V C480V - MCP cut 150 mV + geo cut- SATlist.txt",
+% "Run053_MM res 15 mm 200kOhm - 120 um - PC Ti 2p4 nm - Flushing - A275V C470V - MCP cut 150 mV + geo cut- SATlist.txt",
+% "Run054_MM res 15 mm 200kOhm - 120 um - PC Ti 2p4 nm - Flushing - A285V C470V - MCP cut 150 mV + geo cut- SATlist.txt",
+% "Run055_MM res 15 mm 200kOhm - 120 um - PC Ti 2p4 nm - Flushing - A295V C470V - MCP cut 150 mV + geo cut- SATlist.txt",
+% "Run056_MM res 15 mm 200kOhm - 120 um - PC Ti 2p4 nm - Flushing - A285V C480V - MCP cut 150 mV + geo cut- SATlist.txt",
+% "Run057_MM res 15 mm 200kOhm - 120 um - PC Ti 2p4 nm - Flushing - A265V C490V - MCP cut 150 mV + geo cut- SATlist.txt",
+% "Run068_MM res 15 mm 200kOhm - 120 um - PC Ti 2p4 nm - Flushing - A275V C495V - MCP cut 150 mV + geo cut- SATlist.txt",
+"Run051_MM res 15 mm 20MOhm - 120 um - PC Ti 2p4 nm - Flushing - A275V C510V - MCP cut 150 mV + geo cut- SATlist.txt",
+"Run052_MM res 15 mm 20MOhm - 120 um - PC Ti 2p4 nm - Flushing - A275V C500V - MCP cut 150 mV + geo cut- SATlist.txt",
+"Run053_MM res 15 mm 20MOhm - 120 um - PC Ti 2p4 nm - Flushing - A275V C490V - MCP cut 150 mV + geo cut- SATlist.txt",
+"Run054_MM res 15 mm 20MOhm - 120 um - PC Ti 2p4 nm - Flushing - A285V C490V - MCP cut 150 mV + geo cut- SATlist.txt",
+"Run055_MM res 15 mm 20MOhm - 120 um - PC Ti 2p4 nm - Flushing - A295V C490V - MCP cut 150 mV + geo cut- SATlist.txt",
+"Run056_MM res 15 mm 20MOhm - 120 um - PC Ti 2p4 nm - Flushing - A285V C500V - MCP cut 150 mV + geo cut- SATlist.txt",
+"Run057_MM res 15 mm 20MOhm - 120 um - PC Ti 2p4 nm - Flushing - A285V C510V - MCP cut 150 mV + geo cut- SATlist.txt",
+% "Run066_MM res 15 mm 20MOhm - 120 um - PC Ti 2p4 nm - Flushing - A275V C520V - MCP cut 150 mV + geo cut- SATlist.txt",
+% "Run067_MM res 15 mm 20MOhm - 120 um - PC Ti 2p4 nm - Flushing - A275V C510V - MCP cut 150 mV + geo cut- SATlist.txt",
+"Run068_MM res 15 mm 20MOhm - 120 um - PC Ti 2p4 nm - Flushing - A275V C490V - MCP cut 150 mV + geo cut- SATlist.txt",
+% "Run082_MM res 15 mm 1MOhm - 120 um - PC Ti 2p4 nm - Flushing - A275V C520V - MCP cut 150 mV + geo cut- SATlist.txt",
+% "Run083_MM res 15 mm 1MOhm - 120 um - PC Ti 2p4 nm - Flushing - A275V C510V - MCP cut 150 mV + geo cut- SATlist.txt",
+% "Run084_MM res 15 mm 1MOhm - 120 um - PC Ti 2p4 nm - Flushing - A275V C500V - MCP cut 150 mV + geo cut- SATlist.txt",
+% "Run088_MM res 15 mm 1MOhm - 120 um - PC Ti 2p4 nm - Flushing - A275V C520V - MCP cut 150 mV + geo cut- SATlist.txt",
+% "Run089_MM res 15 mm 1MOhm - 120 um - PC Ti 2p4 nm - Flushing - A275V C510V - MCP cut 150 mV + geo cut- SATlist.txt",
+% "Run090_MM res 15 mm 1MOhm - 120 um - PC Ti 2p4 nm - Flushing - A275V C500V - MCP cut 150 mV + geo cut- SATlist.txt",
+% "Run100_MM res 15 mm 1MOhm - 120 um - PC Ti 2p4 nm - Flushing - A275V C490V - MCP cut 150 mV + geo cut- SATlist.txt",
+% "Run101_MM res 15 mm 1MOhm - 120 um - PC Ti 2p4 nm - Flushing - A275V C490V - MCP cut 150 mV + geo cut- SATlist.txt",
+% "Run102_MM res 15 mm 1MOhm - 120 um - PC Ti 2p4 nm - Flushing - A275V C500V - MCP cut 150 mV + geo cut- SATlist.txt",
+% "Run103_MM res 15 mm 1MOhm - 120 um - PC Ti 2p4 nm - Flushing - A275V C500V - MCP cut 150 mV + geo cut- SATlist.txt",
+% "Run104_MM res 15 mm 1MOhm - 120 um - PC Ti 2p4 nm - Flushing - A275V C510V - MCP cut 150 mV + geo cut- SATlist.txt",
+% "Run105_MM metal 10 mm - 120 um - PC Ti 4p5 nm - Flushing - A275V C470V - MCP cut 150 mV + geo cut- SATlist.txt",
+% "Run106_MM metal 10 mm - 120 um - PC Ti 4p5 nm - Flushing - A275V C480V - MCP cut 150 mV + geo cut- SATlist.txt",
+% "Run111_MM metal 10 mm - 120 um - PC Ti 4p5 nm - Flushing - A275V C460V - MCP cut 150 mV + geo cut- SATlist.txt",
+% "Run115_MM metal 10 mm - 120 um - PC Ti 4p5 nm - Flushing - A275V C450V - MCP cut 150 mV + geo cut- SATlist.txt",
+% "Run116_MM metal 10 mm - 120 um - PC Ti 4p5 nm - Flushing - A275V C440V - MCP cut 150 mV + geo cut- SATlist.txt",
+% "Run355_MM res 15 mm 20 MOhm - 120 um - PC Ti 2p5 nm + Mirror - Flushing - A275V C540V - MCP cut 150 mV + geo cut- SATlist.txt",
+% "Run356_MM res 15 mm 20 MOhm - 120 um - PC Ti 2p5 nm + Mirror - Flushing - A275V C520V - MCP cut 150 mV + geo cut- SATlist.txt",
+% "Run357_MM res 15 mm 20 MOhm - 120 um - PC Ti 2p5 nm + Mirror - Flushing - A275V C500V - MCP cut 150 mV + geo cut- SATlist.txt"
+};
+
+% Create a list of full file paths
+file_list = cellfun(@(filename) fullfile('Input', filename), filenames, 'UniformOutput', false);
+      
+ 
+file_list_ROOT = {
+% % Photocathodes studies
+fullfile('ResultsROOT', 'Run051_ROOTfit.txt')
+fullfile('ResultsROOT', 'Run052_ROOTfit.txt')
+fullfile('ResultsROOT', 'Run053_ROOTfit.txt')
+fullfile('ResultsROOT', 'Run054_ROOTfit.txt')
+fullfile('ResultsROOT', 'Run055_ROOTfit.txt')
+fullfile('ResultsROOT', 'Run056_ROOTfit.txt')
+fullfile('ResultsROOT', 'Run057_ROOTfit.txt')
+% fullfile('ResultsROOT', 'Run068_ROOTfit.txt')
+% fullfile('ResultsROOT', 'Run051_ROOTfit_1.txt')
+% fullfile('ResultsROOT', 'Run052_ROOTfit_1.txt')
+% fullfile('ResultsROOT', 'Run053_ROOTfit_1.txt')
+% fullfile('ResultsROOT', 'Run054_ROOTfit_1.txt')
+% fullfile('ResultsROOT', 'Run055_ROOTfit_1.txt')
+% fullfile('ResultsROOT', 'Run056_ROOTfit_1.txt')
+% fullfile('ResultsROOT', 'Run057_ROOTfit_1.txt')
+% fullfile('ResultsROOT', 'Run066_ROOTfit.txt')
+% fullfile('ResultsROOT', 'Run067_ROOTfit.txt')
+fullfile('ResultsROOT', 'Run068_ROOTfit_1.txt')
+% fullfile('ResultsROOT', 'Run082_ROOTfit.txt')
+% fullfile('ResultsROOT', 'Run083_ROOTfit.txt')
+% fullfile('ResultsROOT', 'Run084_ROOTfit.txt')
+% fullfile('ResultsROOT', 'Run088_ROOTfit.txt')
+% fullfile('ResultsROOT', 'Run089_ROOTfit.txt')
+% fullfile('ResultsROOT', 'Run090_ROOTfit.txt')
+% fullfile('ResultsROOT', 'Run100_ROOTfit.txt')
+% fullfile('ResultsROOT', 'Run101_ROOTfit.txt')
+% fullfile('ResultsROOT', 'Run102_ROOTfit.txt')
+% fullfile('ResultsROOT', 'Run103_ROOTfit.txt')
+% fullfile('ResultsROOT', 'Run104_ROOTfit.txt')
+% fullfile('ResultsROOT', 'Run105_ROOTfit.txt')
+% fullfile('ResultsROOT', 'Run106_ROOTfit.txt')
+% fullfile('ResultsROOT', 'Run111_ROOTfit.txt')
+% fullfile('ResultsROOT', 'Run115_ROOTfit.txt')
+% fullfile('ResultsROOT', 'Run116_ROOTfit.txt')
+% fullfile('ResultsROOT', 'Run355_ROOTfit.txt')
+% fullfile('ResultsROOT', 'Run356_ROOTfit.txt')
+% fullfile('ResultsROOT', 'Run357_ROOTfit.txt')
+ };
+
+% Define the number of bins for histogram
+nbins = 100;
+    
+    % Loop over each file in the list
+for file_index = 1:numel(file_list)
+    % Load the data from the current file
+    data = load(file_list{file_index});
+    
+    % Read the content of the text file as a string
+    fid = fopen(file_list_ROOT{file_index}, 'r');
+    file_content = fscanf(fid, '%c', inf);
+    fclose(fid);
+
+    % Extract key-value pairs using regular expressions
+    key_value_pairs = regexp(file_content, 'fit\.(\w+)\s*=\s*([-0-9\.]+);', 'tokens');
+
+
+    % Initialize the struct
+    fit = struct();
+
+    % Assign values to the struct fields
+    for i = 1:numel(key_value_pairs)
+        key = key_value_pairs{i}{1};
+        value = str2double(key_value_pairs{i}{2});
+        fit.(key) = value;
+    end
+
+
+    % Plot dual Gauss histogram
+    figure;
+    h = histogram(data, nbins);
+    hold on;
+    fit_data = [h.BinEdges(1:end-1) + h.BinWidth/2; h.Values];
+
+    ax = gca;
+    mycolors = [1 0 0; 0 0.25 1; 0 0.85 0];
+    ax.ColorOrder = mycolors;
+    
+    
+    if isfield(fit, 'mean')
+        plot(fit_data(1,:), gauss1_minuit([fit.scale*fit.mixing fit.sigma_core fit.mean], fit_data(1,:)), 'LineWidth', 1.5);
+        plot(fit_data(1,:), gauss1_minuit([fit.scale*(1-fit.mixing) fit.sigma_tail fit.mean], fit_data(1,:)), 'LineWidth', 1.5);
+        plot(fit_data(1,:), gauss2_minuit([fit.scale fit.sigma_core fit.mean fit.mixing fit.sigma_tail], fit_data(1,:)), 'LineWidth', 2);
+    else    
+        plot(fit_data(1,:), gauss1_minuit([fit.scale*fit.mixing fit.sigma_core fit.g1_mean], fit_data(1,:)), 'LineWidth', 1.5);
+        plot(fit_data(1,:), gauss1_minuit([fit.scale*(1-fit.mixing) fit.sigma_tail fit.g1_mean], fit_data(1,:)), 'LineWidth', 1.5);
+        plot(fit_data(1,:), gauss2_minuit([fit.scale fit.sigma_core fit.g1_mean fit.mixing fit.sigma_tail], fit_data(1,:)), 'LineWidth', 2);
+    end
+ 
+
+    message = sprintf('   Entries = %d\n',fit.Entries);
+    message = [message sprintf('   \\chi^2 / NDF = %2.2f / %2d\n',fit.ChiSquare, fit.NDF)];
+    if isfield(fit, 'mean')
+        message = [message sprintf('   \\mu = %2.2f ps \\pm %2.2f ps\n',1000*fit.mean,1000*fit.mean_error)];
+    else
+        message = [message sprintf('   \\mu = %2.2f ps \\pm %2.2f ps\n',1000*fit.g1_mean,1000*fit.g1_mean_error)];
+    end
+    message = [message sprintf('   \\sigma_{1} = %2.2f ps \\pm %2.2f ps\n',1000*fit.sigma_core,1000*fit.sigma_core_error)];
+    message = [message sprintf('   \\sigma_{2} = %2.2f ps \\pm %2.2f ps\n',1000*fit.sigma_tail,1000*fit.sigma_tail_error)];
+    message = [message sprintf('   \\sigma_{comb} = %2.2f ps \\pm %2.2f ps \n',1000*fit.sigma_all,1000*fit.sigma_all_error)];
+    message = [message sprintf('   RMS_{tot} = %2.2f ps \\pm %2.2f ps', 1000*fit.StdDev, 1000*fit.StdDev/sqrt(2*fit.Entries))];
+
+
+    % Extract the mean value from the struct
+%     mean_value = fit.g1_mean;
+% 
+%     % Plot the Gaussians using the extracted mean value
+%     plot(fit_data(1,:), gauss1_minuit([fit.scale*fit.mixing fit.sigma_core mean_value], fit_data(1,:)), 'LineWidth', 1.5);
+%     plot(fit_data(1,:), gauss1_minuit([fit.scale*(1-fit.mixing) fit.sigma_tail mean_value], fit_data(1,:)), 'LineWidth', 1.5);
+%     plot(fit_data(1,:), gauss2_minuit([fit.scale fit.sigma_core mean_value fit.mixing fit.sigma_tail], fit_data(1,:)), 'LineWidth', 2);
+% 
+%     message = sprintf('   Entries = %d\n',fit.Entries);
+%     message = [message sprintf('   \\chi^2 / NDF = %2.2f / %2d\n',fit.ChiSquare, fit.NDF)];
+%     message = [message sprintf('   \\mu = %2.2f ps \\pm %2.2f ps\n',1000*mean_value,1000*fit.g1_mean_error)];
+%     message = [message sprintf('   \\sigma_{1} = %2.2f ps \\pm %2.2f ps\n',1000*fit.sigma_core,1000*fit.sigma_core_error)];
+%     message = [message sprintf('   \\sigma_{2} = %2.2f ps \\pm %2.2f ps\n',1000*fit.sigma_tail,1000*fit.sigma_tail_error)];
+%     message = [message sprintf('   \\sigma_{comb} = %2.2f ps \\pm %2.2f ps \n',1000*fit.sigma_all,1000*fit.sigma_all_error)];
+%     message = [message sprintf('   RMS_{tot} = %2.2f ps \\pm %2.2f ps', 1000*fit.StdDev, 1000*fit.StdDev/sqrt(2*fit.Entries))];
+
+    xlabel('Time difference: PICOSEC vs reference, ns');
+    ylabel('Events');
+    legend('RAW hist','Gaussian 1', 'Gaussian 2','Gaussian comb');
+    grid
+    title_str = sprintf('Time resolution');
+    title(title_str)
+    xlim([-0.2 0.2])
+    y_pos=get(gca,'ylim');
+    x_pos=get(gca,'xlim');
+    text(x_pos(1),0.8*y_pos(2),message)
+    
+    % Define the folder to save the PNG files
+    save_folder = 'ResultsMATLAB';
+    
+    % Extract the run number from the file name
+    [~, filename, ~] = fileparts(file_list_ROOT{file_index});
+    run_number = regexp(filename, 'Run(\d+)_', 'tokens');
+    run_number = run_number{1}{1};
+    
+    % Save the figure with the desired naming convention
+    saveas(gcf, fullfile(save_folder, ['Run' run_number '_TimeResolution_2Gaussfit_1.png']));
+
+end
+

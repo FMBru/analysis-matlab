@@ -1,0 +1,232 @@
+%VERSION DATE: 30/06/2025 - FRANCESCO (summer student)
+%code used to analyze single photoelectron response of PICOSEC using UV LED
+% there's no timing info, used only to check if it possible to extract the
+% number of p.e. emitted knowing the single p.e. response when using the same DUT 
+
+close all
+
+addpath '\\eosproject-smb\eos\project\p\picosec\testbeam\2024_September_h4\Matlab\CommonFunctions';
+addpath '\\eosproject-smb\eos\project\p\picosec\testbeam\2024_September_h4\Matlab\Analysis\Functions';
+
+
+
+% clear everything if not batch processing
+%set run parameters
+if exist('batchProcess','var') == 1
+    run.id = runIDString;
+    run.oscilloscope = oscilloscopeString;
+    run.lecroy_name = '----Trace----'; 
+    opts_MM.chID = DUTnameString;
+    opts_MM.ch_name = ['C' DUTnameString run.lecroy_name];
+    numberFilesToAnalyse = noFileToAnalyze;
+    runInfoString = runInfoDesc;
+else
+    %not batch processing - List here Channels and DUT if not using batch
+    %processing
+    clear all
+    run.lecroy_name = '--Trace--'; %['Run' run.id];
+    run.id = ['061'];
+    run.oscilloscope = 'Pool2';
+    opts_MM.chID = '4';
+    tracker.dutIndex = 5; 
+    opts_MM.ch_name = ['C' opts_MM.chID run.lecroy_name]; 
+    numberFilesToAnalyse = 0; %max number of files to analyse, 0 -> analyse all in folder
+    runInfoString =  'PE run CsI - A275V C430V (mcp trig.)';
+end
+
+shouldSaveDebugPlots = 0;
+numberDebugPlots = 0;
+shouldSaveMat = false;
+
+% run file coordinates and number of files
+minuit = 1;   % set minuit for optimizer if 1 or matlab 0
+
+run.year = '2025 June';
+run.name = ['LAB ' run.year ' RUN ' run.id];
+run.pathEOS=['\\eosproject-smb\eos\project\p\picosec\testbeam\2025_July_h4\' run.oscilloscope '\Run' run.id '\'];
+disp(run.pathEOS)
+run.nfiles = find_fileNo(run.pathEOS);
+
+if(numberFilesToAnalyse>0)
+    run.nfiles =numberFilesToAnalyse;
+end
+
+
+tracker.path = ['\\eosproject-smb\eos\project\p\picosec\testbeam\2025_July_h4\tracker\reconstructed\asciiRun' run.id '.dat'];
+
+if tracker.en
+    trackerFile = fopen(tracker.path,'rt');
+    D = textscan(trackerFile, '%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f', 'Delimiter','\t', 'HeaderLines',2, 'CollectOutput',1);
+    tracker.data = cell2mat(D);
+
+    if length(tracker.data)<1000
+           error('Tracker file asciiRunXXX.dat required but not found or empty. PLease check tracker reconstruction and ROOT->ASCII conversion.')
+    end
+end
+
+% debugPlotsPath=['\\eosproject-smb\eos\project\p\picosec\lab\Francesco\UV_LED_labtest\metallic_singlechannel\DebugPlots\sealedMode\' run.id];
+% if exist(debugPlotsPath, 'dir') == 7
+%     rmdir(debugPlotsPath, 's');
+% end
+% mkdir(debugPlotsPath);
+run.debugPlotsPath=['\\eosproject-smb\eos\project\p\picosec\testbeam\2025_July_h4\Results\DebugPlots\Run' run.id '-'  run.oscilloscope '\'];
+mkdir(run.debugPlotsPath);
+
+%% DO PROCCEISNG\
+% tic
+% if isempty(gcp('nocreate'))
+%     parpool; %activate a parallelization pool
+% end
+% toc
+
+tic;         % start time measurement
+
+MM_maxy_all = cell(run.nfiles, 1); %cell array that will contain all the max
+
+%broadcast variables
+options = opts_MM;
+chName = opts_MM.ch_name;
+pathEOS = run.pathEOS;
+
+% options for extracting tracker ID from the bitstream
+opts_TR.ch_name = ['C3' run.lecroy_name];
+opts_TR.baud_rate = 40e6; % 40Mbps baudrate
+opts_TR.n_bits = 16;      % number of bits after start bit
+
+
+% parfor (ff=1:run.nfiles)  
+for (ff=1:run.nfiles)  
+    
+    %temporary storage for each file
+    localMaxY = [];
+    
+    debugPlotCounter = 0;
+    
+    %dummy struct
+    ch_mm = struct();
+    
+    % display current file number
+    %str_disp=sprintf('Loading file set No. %d', ff);
+    %disp(str_disp);
+    
+    ch_mm_str=sprintf('%s%s%05d.trc', pathEOS, chName,ff);
+    trackerExist = 1;
+
+    if tracker.en
+        ch_tr_str=sprintf('%s%s%05d.trc', run.pathEOS, opts_TR.ch_name,ff);
+        if exist(ch_mm_str,'file')==2
+            
+    end
+    %disp(ch_mm_str);
+
+    filesExists = 0;
+
+    
+    
+    if exist(ch_mm_str,'file')==2 && trackerExist
+        filesExists=1;
+        
+        % decode binary files
+        ch_mm = ReadLeCroyBinaryWaveform(ch_mm_str);
+        
+%         str_disp=sprintf('Processing file set No. %d', ff);
+%         disp(str_disp);
+    else
+        str_disp=sprintf('Skipping file set No. %d', ff);
+        disp(str_disp);
+    end
+    
+    if filesExists==1
+        % get number of segments (events) in one file
+        nTRCseg = ch_mm.info.nbSegments;
+        
+        % go trough all of the events in the file
+        for m=1:nTRCseg
+            
+            %unique ID for the event
+            eventID = (ff-1)*nTRCseg + m - 1 ;
+            
+            %extract the max (signal is negative -> -1*...)
+            maxy = max(-1*ch_mm.y(:,m));
+            
+            if shouldSaveDebugPlots && maxy > 0.02
+                if debugPlotCounter<numberDebugPlots
+                    figure(2)
+                    plot(ch_mm.x(:,m),ch_mm.y(:,m));
+                    ylabel('Voltage, V');
+                    xlabel('Time, s');
+                    saveas(gcf,[debugPlotsPath '\Event' int2str(eventID) '_signals.png']);
+                    %pause(2);
+                    close all;
+                    debugPlotCounter = debugPlotCounter+1;
+                end
+            end
+            
+            localMaxY(end+1) = maxy;
+        end
+    end
+    
+    MM_maxy_all{ff} = localMaxY;
+    
+    close all;
+end
+
+toc
+
+%concatenate all the maxy vectors
+MM_maxy = horzcat(MM_maxy_all{:});
+
+% store_folder = ['\\eosproject-smb\eos\project\p\picosec\lab\Francesco\UV_LED_labtest\metallic_singlechannel\sealedMode\Results\' run.id];
+% if exist(store_folder, 'dir') == 7
+%     rmdir(store_folder, 's');
+% end
+% 
+% mkdir(store_folder);
+
+store_folder = ['\\eosproject-smb\eos\project\p\picosec\testbeam\2025_July_h4\Results\Run' run.id '-' run.oscilloscope '-dut' opts_MM.chID 'slowAMP' '-' runInfoString];
+mkdir(store_folder);
+
+mat_folder = ['\\eosproject-smb\eos\project\p\picosec\lab\Francesco\UV_LED_labtest\metallic_singlechannel\sealedMode\MatFile'];
+if exist(mat_folder, 'dir') == 0
+    mkdir(mat_folder);
+end
+
+figure
+
+hold on
+h=histogram(MM_maxy,100); 
+initial_bin = 10;
+
+
+xbins = h.BinEdges(1:end-1)+h.BinWidth/2;
+fit_data = [];
+fit_data(1,:)=initial_bin:length(xbins);
+fit_data(2,:) = h.Values(fit_data(1, :));
+% fit_data(3,:) = yerr;
+p0=[];
+p0(1) = sum(h.Values)*h.BinWidth;   % normalization factor
+p0(2) = 1;
+p0(3) = 0.1;
+cmd='min; ret';
+[p, err, chi] = fminuit('polya_minuit',p0,fit_data(:,1:end),'-b','-c',cmd);
+polya_cnt_fit = polya_minuit(p,fit_data(1,:));
+plot(xbins(fit_data(1,:)),polya_cnt_fit,'Linewidth',2);
+e_peak_amp.mean = sum(polya_cnt_fit.*xbins(fit_data(1,:)))/sum(polya_cnt_fit);
+e_peak_amp.meanError = sqrt(sum(polya_cnt_fit.*(xbins(fit_data(1,:))-e_peak_amp.mean).*(xbins(fit_data(1,:))-e_peak_amp.mean)))/sum(polya_cnt_fit);
+[dummy, e_peak_amp.max_idx] = max(polya_cnt_fit);
+
+xlabel('Signal amplitude, V')
+ylabel('Events');
+grid on
+legend('MM','MM fit');
+%ylim([0 2000]);
+title_str = sprintf('e-peak amplitude \\mu = %4.4f pm %4.4f V U_{max} = %4.4f V', e_peak_amp.mean, e_peak_amp.meanError, xbins(e_peak_amp.max_idx));
+title(title_str)
+saveas(gcf,[store_folder '\SignalAmplitude_Hist_MM.png'])
+
+
+close all;
+
+if shouldSaveMat
+    save([mat_folder '\Run' run.id '.mat'], 'MM_maxy');
+end

@@ -1,0 +1,2 @@
+#run ID, Oscilloscope, DUT CH, REF CH, Detector ID (MM #), filesToAnalyse (0 is all)xxxx - add x between linesxxxxxxxxxxxxxxxxxxxx
+097

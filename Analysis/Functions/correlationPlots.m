@@ -1,0 +1,179 @@
+function [message, fit_param,fit2_param] = correlationPlots(values1,values2, name1, unit1, name2, unit2, store_folder, titleString, shouldSave, shouldFit)
+%CORRELATIONPLOTS Summary of this function goes here
+
+fit_w_minuit = true;
+message = '';
+fit_param = [];
+fit2_param = [];
+
+%ft = fittype(' a*exp(b*x)+c*exp(d*x)+e', independent = 'x');
+
+figure
+histogram2(values1,values2, 'NumBins', [100 100], 'DisplayStyle', 'tile', 'ShowEmptyBins', 'on');
+xlabel([name1 ', ' unit1]);
+ylabel([name2 ', ' unit2]);
+title([name2 ' vs ' name1 titleString])
+if shouldSave
+    saveas(gcf,[store_folder '\' name2 '-vs-' name1 titleString '.png']);
+end
+close
+
+if strcmp(name1, 'riseTime')
+    shouldSave = false;
+end
+
+
+if shouldFit
+    % % to fit the trend
+    Nbins = 20;
+    edges = quantile(values1, linspace(0,1,Nbins+1));              
+    [~,~,bin] = histcounts(values1,edges);
+    
+    valid = bin > 0;
+    
+    % Media e deviazione in ogni bin
+    val1_mean = accumarray(bin(valid), values1(valid), [], @(x) mean(x,'omitnan'), NaN);
+    val2_mean = accumarray(bin(valid), values2(valid), [], @(x) mean(x,'omitnan'), NaN);
+    val2_std  = accumarray(bin(valid), values2(valid), [], @(x) std(x,'omitnan'),  NaN);
+    npts = accumarray(bin(valid), 1, [], @(x) sum(x,'omitnan'),  NaN);
+    val2_err = val2_std ./ sqrt(npts);
+    % 
+    % % Bin centers
+    % val1_centers = (edges(1:end-1)+edges(2:end))/2;
+    % 
+    % % Plot with error bars
+    figure;
+    errorbar(val1_mean, val2_mean, val2_err, 'bo')
+    
+    % fit correction function using minuit
+    fit_data = [];
+    fit_data(1,:) = val1_mean;
+    fit_data(2,:) = val2_mean;
+    fit_data(3,:) = val2_err;
+    
+    if fit_w_minuit
+        fitString = 'fit';
+        p0=[];
+        p0(1) = min(val2_mean);
+        p0(2) = 0.11;
+        p0(3) = 0.5;
+        cmd='min; ret';
+        evalc("[p, err, chi] = fminuit('twalk_fn_minuit',p0,fit_data(:,1:end),'-b','-c',cmd);");
+    
+        hold on
+        plot(val1_mean,twalk_fn_minuit(p,val1_mean'), 'r-', 'LineWidth',1.5);
+        fit_param = p;
+    else
+        fitString = 'fitPoly';
+    
+        startpoints = [1 -0.3 1 -0.5 min(val2_mean)];
+    
+        % weigthed fit
+        w = 1 ./ (fit_data(3,:)' .^2);
+        %w = ones(length(fit_data(1,:)));
+        coeff = fit(fit_data(1,:)', fit_data(2,:)', ft, 'StartPoint', startpoints, 'Weights', w);
+    
+        yfit = feval(coeff, fit_data(1,:)');
+        chi = sum(((fit_data(2,:)' - yfit)./ fit_data(3,:)').^2);
+    
+        hold on
+        h = plot(coeff);
+        set(h, 'Color', 'r', 'LineWidth', 1.5);
+        legend off
+    
+        p = coeffvalues(coeff);
+        fit_param = coeff;
+    end
+    
+    
+    
+    
+    % % plot time walk correction and fit
+    xlabel([name1 ', ' unit1]);
+    ylabel([name2 ', ' unit2]);
+    title([name2 ' vs ' name1 titleString])
+    
+    message = sprintf('\\chi^2 / dof: %.2f / %d \n', chi, length(fit_data(1,:))-3);
+    %message = '';
+    for j=1:length(p)
+        message = [message sprintf('p_%d: %.3f \n', j, p(j))];
+    end
+    y_pos=get(gca,'ylim');
+    x_pos=get(gca,'xlim');
+    text(x_pos(1)+0.7*(x_pos(2)-x_pos(1)),y_pos(1)+0.7*(y_pos(2)-y_pos(1)),message);
+    if shouldSave
+        saveas(gcf,[store_folder '\' name2 '-vs-' name1 fitString titleString '.png']);
+    end
+    hold off
+    close
+    
+    
+    %% RESOLUTION PLOTS
+    val2_std_err = val2_std ./ sqrt(2*(npts-1));
+    
+    % % Plot with error bars
+    figure;
+    errorbar(val1_mean, val2_std, val2_std_err, 'bo')
+    
+    % fit correction function using minuit
+    fit_data = [];
+    fit_data(1,:) = val1_mean;
+    fit_data(2,:) = val2_std;
+    fit_data(3,:) = val2_std_err;
+    
+    if fit_w_minuit
+        fitString = '';
+        p0=[];
+        p0(1) = min(val2_std);
+        p0(2) = 0.2;
+        p0(3) = 1;
+        cmd='min; ret';
+        evalc("[p, err, chi] = fminuit('twalk_fn_minuit',p0,fit_data(:,1:end),'-b','-c',cmd);");
+    
+        hold on
+        plot(val1_mean,twalk_fn_minuit(p,val1_mean'), 'r-', 'LineWidth',1.5);
+        fit2_param = p;
+    else
+        fitString = 'fitExp';
+    
+        startpoints2 = [1 -0.3 1 -0.5 min(val2_std)];
+    
+        % weigthed fit
+        w = 1 ./ (fit_data(3,:)' .^2);
+        %w = ones(length(fit_data(1,:)));
+        coeff = fit(fit_data(1,:)', fit_data(2,:)', ft, 'StartPoint', startpoints2, 'Weights', w);
+    
+        yfit = feval(coeff, fit_data(1,:)');
+        chi = sum(((fit_data(2,:)' - yfit)./ fit_data(3,:)').^2);
+    
+        hold on
+        h = plot(coeff);
+        set(h, 'Color', 'r', 'LineWidth', 1.5);
+        legend off
+    
+        p = coeffvalues(coeff);
+        fit2_param = coeff;
+    end
+    
+    fit2_param = p;
+    
+    xlabel([name1 ', ' unit1]);
+    ylabel(['\\sigma_{' name2 '}, ' unit2]);
+    title([name2 '-RESOLUTION vs ' name1 titleString])
+    message = sprintf('\\chi^2 / dof: %.2f / %d \n', chi, length(fit_data(1,:))-3);
+    %message = '';
+    for j=1:length(p)
+        message = [message sprintf('p_%d: %.3f \n', j, p(j))];
+    end
+    y_pos=get(gca,'ylim');
+    x_pos=get(gca,'xlim');
+    text(x_pos(1)+0.7*(x_pos(2)-x_pos(1)),y_pos(1)+0.7*(y_pos(2)-y_pos(1)),message);
+    if shouldSave
+        saveas(gcf,[store_folder '\' name2 'resolution-vs-' name1 fitString titleString '.png']);
+    end
+    hold off
+    close
+end
+
+end
+

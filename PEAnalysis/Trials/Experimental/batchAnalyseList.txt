@@ -1,0 +1,2 @@
+#run ID, Oscilloscope, DUT CH, REF CH, Detector ID (MM #), filesToAnalyse (0 is all) - add x between lines, RunDescxxxxxxxxxxxxxxxxxxxxxxx 046,Pool3,4,1,6,0,USTCxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx   
+

@@ -1,0 +1,6 @@
+#run ID, Oscilloscope, DUT CH, REF CH, Detector ID (MM #), filesToAnalyse (0 is all) - add x between lines, uRWELL11-170um-575C-240A-DLC cxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\xxxxxxxxxxxxxxxxxxxxxxxx
+x
+x
+x
+x
+x

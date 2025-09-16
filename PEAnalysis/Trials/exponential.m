@@ -1,0 +1,102 @@
+% Author: M.L. Velazquez Fernandez
+% 
+% Script created to plot the SPE mean vs the cathode V
+% and then fit an exponential to it.
+
+clear;
+clc;
+
+% Define the data points
+x = [500, 510, 520, 530, 540] % Cathode voltage
+y = [0.01777, 0.02256, 0.02809, 0.03597, 0.04495]; % SPE mean
+
+
+% Plot the datapoints
+figure;
+
+scatter(x, y, 'filled', 'o', 'black');
+hold on;
+xlabel('Voltage [V]');
+ylabel('SPE mean');
+
+% Fit and plot the exponential to the data
+f = fit(x', y', 'exp1');
+coeffs = coeffvalues(f);
+a = coeffs(1);
+b = coeffs(2);
+eq = sprintf('y = %.4e * exp(%.4e * x)', a, b)
+plot(f, '-- black')
+set(gca, 'yscale','log')
+
+% Repeat the process with the second set of datapoints 275A
+%x_mesh = [500, 520, 530]
+%y_mesh = [0.01210, 0.01860, 0.02232]
+
+x_mesh = [510, 520, 530, 540]
+y_mesh = [0.01634, 0.02127, 0.02655, 0.03365]
+
+scatter(x_mesh, y_mesh, 'filled', 'o', 'red');
+
+f1 = fit(x_mesh', y_mesh', 'exp1');
+coeffs1 = coeffvalues(f1);
+a1 = coeffs1(1);
+b1 = coeffs1(2);
+eq1 = sprintf('y = %.4e * exp(%.4e * x)', a1, b1)
+
+plot(f1, '-- red')
+
+% Elec. mesh with anode voltage fix at 300V
+x_mesh4 = [500, 510, 520]
+y_mesh4 = [0.02601, 0.03256, 0.03948]
+
+scatter(x_mesh4, y_mesh4, 'filled', 'o', "MarkerFaceColor","green");
+
+f4 = fit(x_mesh4', y_mesh4', 'exp1');
+coeffs4 = coeffvalues(f4);
+a4 = coeffs4(1);
+b4 = coeffs4(2);
+eq4 = sprintf('y = %.4e * exp(%.4e * x)', a4, b4);
+
+plot(f4, '-- green');
+
+
+% Thin mesh 275A
+x_mesh1 = [500, 510, 520, 530, 540, 550, 560, 570, 580]
+y_mesh1 = [0.00627, 0.00789, 0.00973, 0.01228, 0.01561, 0.01961, 0.02477, 0.03134, 0.04041]
+
+scatter(x_mesh1, y_mesh1, 'filled', 'o', "MarkerFaceColor","b");
+
+f2 = fit(x_mesh1', y_mesh1', 'exp1');
+coeffs2 = coeffvalues(f2);
+a2 = coeffs2(1);
+b2 = coeffs2(2);
+eq2 = sprintf('y = %.4e * exp(%.4e * x)', a2, b2);
+
+plot(f2, '-- blue');
+
+% Thin mesh 300A
+x_mesh3 = [500, 510, 520, 530, 540, 550]
+y_mesh3 = [0.01471, 0.01871, 0.02373, 0.02985, 0.03692, 0.04666]
+
+scatter(x_mesh3, y_mesh3, 'filled', 'o', "MarkerFaceColor","yellow");
+
+f3 = fit(x_mesh3', y_mesh3', 'exp1');
+coeffs3 = coeffvalues(f2);
+a3 = coeffs3(1);
+b3 = coeffs3(2);
+eq3 = sprintf('y = %.4e * exp(%.4e * x)', a3, b3);
+
+plot(f3, '-- yellow');
+
+xlabel('Voltage [V]');
+ylabel('SPE mean');
+
+
+%legend('Mesh 1', ['Exponential fit: ', eq], 'Mesh 2 (275A)',  ['Exponential fit: ', eq1], 'Mesh 2 (325A)',  ['Exponential fit: ', eq2])
+legend('STD mesh (275V A)', ['Exponential fit: ', eq], 'Elec. mesh (275V A)',  ['Exponential fit: ', eq1], 'Elec. mesh (300V A)',  ['Exponential fit: ', eq4], ...
+    'Thin mesh (275V A)', ['Exponential fit: ', eq2], 'Thin mesh (300V A)',  ['Exponential fit: ', eq3])
+
+hold off;
+
+
+

@@ -1,0 +1,446 @@
+clear all
+close all
+addpath '..\Analysis\Functions';
+addpath '\\eosproject-smb\eos\project\p\picosec\testbeam\2025_July_h4\Matlab\CommonFunctions';
+
+%% configuration
+
+geom.x_window_length = 30;               %x size of the region in which we are focusing geometrically
+geom.y_window_length = 30;               %y size of the region in which we are focusing geometrically
+geom.pad_window_length = 10;             %pad size (multipad)
+
+padArray = [23, 33, 24, 34];        %numbers of the analysed pads
+singlepad_tables = cell(length(padArray),1);       %cell array that will contain the tables of the single pads
+
+%folder where all the images will be stored
+store_folder = '\\eosproject-smb\eos\project\p\picosec\testbeam\2025_July_h4\Matlab\Multipad';
+mkdir(store_folder);
+
+%list mat files where data are stored
+fileList = {'\\eosproject-smb\eos\project\p\picosec\testbeam\2025_July_h4\Matlab\Run366-Pool2-Multipad double DLC pad 23.mat';
+            '\\eosproject-smb\eos\project\p\picosec\testbeam\2025_July_h4\Matlab\Run366-Pool2-Multipad double DLC pad 33.mat';
+            '\\eosproject-smb\eos\project\p\picosec\testbeam\2025_July_h4\Matlab\Run366-Pool3-Multipad double DLC pad 24.mat';
+            '\\eosproject-smb\eos\project\p\picosec\testbeam\2025_July_h4\Matlab\Run366-Pool3-Multipad double DLC pad 34.mat'};
+%% loading processed data
+
+%load data from each pad and storing them in a table
+for i=1:length(padArray)
+    load(fileList{i}); 
+    singlepad_tables{i} = table(eventIDArray(:), trackerX(:), trackerY(:), MCP_maxy(:), MM_maxy(:), e_peak_MM(:), time_diff_sigmoid(:), riseTime(:), 'VariableNames', {'eventID','X', 'Y', 'MCP_amp', 'MM_amp', 'e_peak_MM', 'SAT', 'riseTime'});
+end
+
+clearvars -except twalk geom singlepad_tables padArray store_folder
+
+%% if some events in between have a strange eventID remove them (normally 10 over 1'000'000)
+
+for i=1:length(padArray)
+    singlepad_tables{i} = sortrows(singlepad_tables{i},"eventID","ascend");
+    singlepad_tables{i} = cleanDouble(singlepad_tables{i});
+end
+
+
+%% table merging 
+
+%make a copy of the single pad tables to rename the entries
+singlepad_tablesCopy = singlepad_tables;
+MM_ampvars = cell(length(padArray),1);
+e_peakvars = cell(length(padArray),1);
+riseTimevars = cell(length(padArray),1);
+SATvars = cell(length(padArray),1);
+padNames = cell(length(padArray),1);
+
+for i=1:length(padArray)
+    singlepad_tablesCopy{i}.Properties.VariableNames = {'eventID','X', 'Y', ['MCP_amp' num2str(padArray(i))] , ['MM_amp' num2str(padArray(i))], ['e_peak_MM' num2str(padArray(i))], ['SAT' num2str(padArray(i))], ['riseTime' num2str(padArray(i))]};
+    MM_ampvars{i} = ['MM_amp' num2str(padArray(i))];
+    e_peakvars{i} = ['e_peak_MM' num2str(padArray(i))];
+    SATvars{i} = ['SAT' num2str(padArray(i))];
+    riseTimevars{i} = ['riseTime' num2str(padArray(i))];
+    padNames{i} = ['pad' num2str(padArray(i))];
+end
+
+%pack it in a structure
+all_variables.MM_ampvars = MM_ampvars;
+all_variables.e_peakvars = e_peakvars;
+all_variables.riseTimevars = riseTimevars;
+all_variables.SATvars = SATvars;
+all_variables.padNames = padNames;
+
+%merge the tables together one by one
+allpads_table = singlepad_tablesCopy{1};
+for i=2:length(padArray)
+    allpads_table = outerjoin(allpads_table,singlepad_tablesCopy{i}, 'Keys',{'eventID','X','Y'}, 'MergeKeys',true);
+end
+
+allpads_table = sortrows(allpads_table,"eventID","ascend");
+
+%check the MCP values difference and keep only one MCP info
+MCP_matrix = zeros(height(allpads_table), length(padArray));
+MCP_matrix(:,1) = allpads_table.(['MCP_amp' num2str(padArray(1))]);
+
+for i=2:length(padArray)
+    disp(['MCP amplitude comparison between pad ' num2str(padArray(i)) ' and ' num2str(padArray(i-1))]);
+    disp(['Mean: '  num2str(mean(allpads_table.(['MCP_amp' num2str(padArray(i))]) - allpads_table.(['MCP_amp' num2str(padArray(i-1))]), 'omitnan'))]);
+     disp(['Sigma: '   num2str(std(allpads_table.(['MCP_amp' num2str(padArray(i))]) - allpads_table.(['MCP_amp' num2str(padArray(i-1))]), 'omitnan'))])
+    MCP_matrix(:,i) = allpads_table.(['MCP_amp' num2str(padArray(i))]);
+end
+
+%getting rid of extra mcp infos
+MCP_vector = mean(MCP_matrix, 2, 'omitnan');
+allpads_table.(['MCP_amp' num2str(padArray(1))]) = MCP_vector;
+
+for i=2:length(padArray)
+    allpads_table.(['MCP_amp' num2str(padArray(i))]) = [];
+end
+
+allpads_table.Properties.VariableNames{['MCP_amp' num2str(padArray(1))]} = 'MCP_amp';
+
+clear MCP_vector
+clear MCP_matrix
+%% analysis 2D for single pads
+
+pad.centers_array = zeros(length(padArray), 2);
+pad.MeanAmp = zeros(length(padArray), 1);
+pad.SAT = zeros(length(padArray), 2);
+pad.RiseTime = zeros(length(padArray), 2);
+pad.TimeWalkCorr = cell(length(padArray),1);
+pad.TimeResCorr = cell(length(padArray),1);
+pad.TimeWalkCorr_central = cell(length(padArray),1);
+pad.TimeResCorr_central = cell(length(padArray),1);
+pad.TimeWalkCorr_full = cell(length(padArray),1);
+pad.TimeResCorr_full = cell(length(padArray),1);
+pad.geoms = cell(length(padArray),1);
+pad_selected = cell(length(padArray),1);
+
+for i=1:numel(singlepad_tables)
+    
+    pad_folder = [store_folder '\SINGLEPAD\pad' num2str(padArray(i)) '\maps'];
+    mkdir(pad_folder);
+
+    %select the subset of events on a big area around the pad
+    pad_table = singlepad_tables{i};
+    MM_ampCut = pad_table.MM_amp > 0.01*max(pad_table.MM_amp) & pad_table.MM_amp < 0.99*max(pad_table.MM_amp);
+    MCP_ampCut = pad_table.MCP_amp >= 0.15 & pad_table.MCP_amp > 0.01*max(pad_table.MCP_amp) & pad_table.MCP_amp < 0.99*max(pad_table.MCP_amp);
+    riseTimeCut = abs(pad_table.riseTime) < 10;
+    SATCut = abs(pad_table.SAT - median(pad_table.SAT)) < 5;
+    
+    subset = pad_table(MM_ampCut & MCP_ampCut & riseTimeCut & SATCut, :);
+    [sub_frame, subset] = geometricalFrame(subset, geom, 1);
+
+    [pad_x_center, pad_y_center] = singlePadMaps(padArray(i), sub_frame, subset, geom, pad_folder, false);
+
+    % -------------------- selecting only the pad itself -------------------
+
+    pad_geom.x_centroid = pad_x_center;
+    pad_geom.y_centroid = pad_y_center;
+    pad_geom.x_window_length = geom.pad_window_length;
+    pad_geom.y_window_length = geom.pad_window_length;
+    pad_geom.pad_window_length = geom.pad_window_length;
+
+    [~, pad_selected_table] = geometricalFrame(subset, pad_geom, 0.3, 'center');
+
+    %additional cut on the SAT
+    SATCutfine = abs(pad_selected_table.SAT - mean(pad_selected_table.SAT)) < 5*std(pad_selected_table.SAT);
+    riseTimeCutfine = abs(pad_selected_table.riseTime - mean(pad_selected_table.riseTime)) < 5*std(pad_selected_table.riseTime);
+    pad_selected_table = pad_selected_table(SATCutfine & riseTimeCutfine, :);
+    [pad_frame, pad_selected_table] = geometricalFrame(pad_selected_table, pad_geom, 0.3, 'center');
+
+    pad.geoms{i} = pad_geom;
+    pad_selected{i} = pad_selected_table;
+
+    pad_selected_folder = [store_folder '\PAD-SELECTED\pad' num2str(padArray(i))];
+    mkdir(pad_selected_folder);
+
+    pad_maps_folder = [store_folder '\PAD-SELECTED\pad' num2str(padArray(i)) '\maps'];
+    mkdir(pad_maps_folder);
+
+    [pad_x_center,pad_y_center] = singlePadMaps(padArray(i), pad_frame, pad_selected_table, pad_geom, pad_maps_folder, false);    
+    pad.centers_array(i,1) = pad_x_center;
+    pad.centers_array(i,2) = pad_y_center;
+
+    % distributions over the pad
+    [~,~, ~, ~, ~, pad.TimeWalkCorr{i}, pad.TimeResCorr{i}] = characterisePad(pad_selected_table,padArray(i), pad_selected_folder, false);
+
+    % distribution center of the pad
+    pad_selected_folder = [store_folder '\PAD-SELECTED\pad' num2str(padArray(i)) '\central'];
+    mkdir(pad_selected_folder);
+
+    % amplitude distribution in the center
+    cut_radius = 2;
+    central_cut = (pad_selected_table.X - pad_x_center).^2 + (pad_selected_table.Y - pad_y_center).^2 < cut_radius^2;
+    
+    [pad.MeanAmp(i),pad.SAT(i,1), pad.SAT(i,2), pad.RiseTime(i,1), pad.RiseTime(i,2), pad.TimeWalkCorr_central{i}, pad.TimeResCorr_central{i}] = characterisePad(pad_selected_table(central_cut,:),padArray(i), pad_selected_folder, false, 'central');
+
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%% correct SAT and check maps etc %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    pad_timewalk_folder = [store_folder '\PAD-SELECTED\pad' num2str(padArray(i)) '\timewalk'];
+    mkdir(pad_timewalk_folder);
+    pad_timewalk_folder_central = [store_folder '\PAD-SELECTED\pad' num2str(padArray(i)) '\timewalk\central'];
+    mkdir(pad_timewalk_folder_central);
+    
+    correctedSAT = pad_selected_table.SAT - (twalk_fn_minuit(pad.TimeWalkCorr{i}, (pad_selected_table.e_peak_MM)'))';
+    distribution(correctedSAT, 100, 'SAT-corrected', 'ns', pad_timewalk_folder, ['-pad' num2str(padArray(i))], false);
+    [satMap, stdsatMap] = twoDimensionsMap(pad_frame, correctedSAT);
+    plotMap(pad_frame, satMap);
+    title(['Mean SAT map pad' num2str(padArray(i))]);
+    saveas(gcf,[pad_timewalk_folder '\meanSATMap_pad' num2str(padArray(i)) '.png']);
+    close
+    
+    plotMap(pad_frame, stdsatMap);
+    title(['Mean time res map pad' num2str(padArray(i))]);
+    saveas(gcf,[pad_timewalk_folder '\timeresMap_pad' num2str(padArray(i)) '.png']); 
+    close
+
+    pad_central_frame = geometricalFrame(pad_selected_table(central_cut,:), pad_geom, 0.3, 'center');
+    correctedSAT = pad_selected_table(central_cut,:).SAT - (twalk_fn_minuit(pad.TimeWalkCorr_central{i}, (pad_selected_table(central_cut,:).e_peak_MM)'))';
+    distribution(correctedSAT, 100, 'SAT-corrected', 'ns', pad_timewalk_folder_central, ['-pad' num2str(padArray(i)) '-CENTRAL'], false);
+    [satMap, stdsatMap] = twoDimensionsMap(pad_central_frame, correctedSAT);
+    plotMap(pad_central_frame, satMap);
+    title(['Mean SAT map pad' num2str(padArray(i)) '-CENTRAL']);
+    saveas(gcf,[pad_timewalk_folder_central '\meanSATMap_pad' num2str(padArray(i)) '-CENTRAL.png']);
+    close
+    
+    plotMap(pad_central_frame, stdsatMap);
+    title(['Mean time res map pad' num2str(padArray(i)) '-CENTRAL']);
+    saveas(gcf,[pad_timewalk_folder_central '\timeresMap_pad' num2str(padArray(i)) '-CENTRAL.png']); 
+    close
+
+
+    %diagonal plots
+%     diagPlots(pad_selected_table, pad_geom, 'MM_amp', padArray(i), pad_selected_folder, false); %amplitude along the two diagonals
+%     diagPlots(pad_selected_table, pad_geom, 'SAT', padArray(i), pad_selected_folder, false); %SAT along the two diagonals
+%     diagPlots(pad_selected_table, pad_geom, 'riseTime', padArray(i), pad_selected_folder, false); %riseTime along the two diagonals
+
+end
+
+clear ans cut_radius central_cut pad_x_center pad_y_center MCP_ampCut MM_ampCut riseTimeCut riseTimeCutfine SATCut SATCutfine pad_folder pad_maps_folder pad_selected_folder pad_selected_table pad_table subset pad_geom sub_frame pad_frame
+%% move around the pad
+
+% store_folderCopy = [store_folder '\moveAround'];
+% mkdir(store_folderCopy);
+% %ylimss = [ -7.75 -7.55; 2 2.2; -3.65 -3.5; -6.8 -6.6] ;
+% for i=1:length(padArray)
+% 
+%     pad_selected_table = pad_selected{i};
+%     pad_geom = pad_geoms{i};
+% 
+% %     ampRegion = pad_selected_table.MM_amp > 0.3 & pad_selected_table.MM_amp < 0.9 ;
+% %     pad_selected_table = pad_selected_table(ampRegion, :);
+% 
+%     %coarser map of the pad
+%     [pad_frame, pad_selected_table] = geometricalFrame(pad_selected_table, pad_geom, 3.3333, 'center');
+%     %singlePadMaps(padArray(i), pad_frame, pad_selected_table, pad_geom, store_folder, false);
+% 
+%     moveAroundThePad(pad_selected_table, pad_geom, padArray(i), store_folderCopy, false, [0 60], [0.7 0.87]);
+%     
+% 
+% end
+
+
+%% check for crosstalk between the pads
+
+%crosstalkAnalysis(allpads_table, padArray, pad.centers_array, geom, store_folder);
+
+%% cut on the SAT and on the amplitude to exclude crosstalk 
+
+full_geom.x_centroid = mean(pad.centers_array(:,1));
+full_geom.y_centroid = mean(pad.centers_array(:,2));
+full_geom.x_window_length = ceil(length(padArray)/2) * geom.pad_window_length + 10;
+full_geom.y_window_length = ceil(length(padArray)/2) * geom.pad_window_length + 10;
+full_geom.pad_window_length = geom.pad_window_length;
+full_geom.centers = pad.centers_array;
+
+ampMaxperEvent = max(allpads_table{:,MM_ampvars}, [], 2, 'omitnan');
+
+for i=1:length(padArray)
+    crosstalk_sat_condition = abs(allpads_table.(SATvars{i}) - pad.SAT(i,1)) > 7*pad.SAT(i,2);
+    riseTime_condition = abs(allpads_table.(riseTimevars{i}) - pad.RiseTime(i,1)) > 7*pad.RiseTime(i,2);
+    crosstalk_amp_condition = ampMaxperEvent > 17 * allpads_table.(MM_ampvars{i});
+    amplitude_condition = allpads_table.(MM_ampvars{i}) > 0.95 * max(allpads_table.(MM_ampvars{i}), [], 'omitnan') | allpads_table.(MM_ampvars{i}) < 0.03 * max(allpads_table.(MM_ampvars{i}), [], 'omitnan');
+    crosstalk_cond = crosstalk_amp_condition | riseTime_condition | crosstalk_sat_condition | amplitude_condition;
+    allpads_table{crosstalk_cond, {MM_ampvars{i}, riseTimevars{i}, SATvars{i}, e_peakvars{i}}} = NaN;
+end
+
+%exclude full NaN events
+allpads_table = removeAllNaNRows(allpads_table, {'eventID', 'X', 'Y', 'MCP_amp'});
+
+MCP_ampCut = allpads_table.MCP_amp >= 0.15 & allpads_table.MCP_amp > 0.01*max(allpads_table.MCP_amp) & allpads_table.MCP_amp < 0.95*max(allpads_table.MCP_amp);
+
+subset = allpads_table(MCP_ampCut, :);
+[full_frame, finalTable] = geometricalFrame(subset, full_geom, 1, 'center');
+
+% Compute counts map
+[~,~,countMap] = twoDimensionsMap(full_frame, ones(height(finalTable),1));
+plotMap(full_frame, countMap);
+title('Count map full');
+pause(2)
+close;
+
+clear ans ampMaxperEvent crosstalk_cond crosstalk_sat_condition crosstalk_amp_condition riseTime_condition amplitude_condition MCP_ampCut subset countMap
+%% understand which pad are active
+
+sampling_geom.x_centroid = mean(pad.centers_array(:,1));
+sampling_geom.y_centroid = mean(pad.centers_array(:,2));
+sampling_geom.x_window_length = ceil(length(padArray)/2) * geom.pad_window_length - 10;
+sampling_geom.y_window_length = ceil(length(padArray)/2) * geom.pad_window_length - 10;
+sampling_geom.pad_window_length = geom.pad_window_length;
+sampling_geom.centers = pad.centers_array;
+
+dummyvector = zeros(height(finalTable),1);
+
+for i=1:length(padArray)
+    finalTable.(padNames{i}) = dummyvector;
+    padColumns = {MM_ampvars{i}, riseTimevars{i}, SATvars{i}, e_peakvars{i}};
+    activePadCut = ~all(isnan(finalTable{:, padColumns}), 2);
+    finalTable{activePadCut,padNames{i}} = 1;
+end
+
+finalTable.nActivePad = dummyvector;
+
+
+for i=1:length(padArray)
+    finalTable.nActivePad = finalTable.nActivePad + finalTable.(padNames{i});
+end
+
+clear padColumns activePadCut
+%% reconstruct position
+
+finalTable.recX = dummyvector;
+finalTable.recY = dummyvector;
+dummyAMP = zeros(height(finalTable),1);
+dummyX = zeros(height(finalTable),1);
+dummyY = zeros(height(finalTable),1);
+totalWeight = zeros(height(finalTable),1);
+weights = cell(4,1);
+
+for i=1:numel(padNames)
+    w1 = fillmissing(finalTable.(padNames{i}), 'constant', 0);
+    w2 = fillmissing(finalTable.(MM_ampvars{i}), 'constant', 0);
+    weights{i} = w1 .*  w2 / pad.MeanAmp(i);
+    dummyX = dummyX + weights{i} * pad.centers_array(i,1);
+    dummyY = dummyY + weights{i} * pad.centers_array(i,2);
+    totalWeight = totalWeight + weights{i};
+
+    %for later use
+    dummyAMP = dummyAMP + w1 .*  w2;
+end
+
+dummyX = dummyX ./ totalWeight;
+dummyY = dummyY ./ totalWeight;
+
+finalTable.recX = dummyX;
+finalTable.residualX = dummyX - finalTable.X;
+finalTable.recY = dummyY;
+finalTable.residualY = dummyY - finalTable.Y;
+
+finalTable.summedAmp = dummyAMP;
+
+clear dummyvector dummyX dummyY dummyAMP weights totalWeight w1 w2
+%% residual histograms
+
+distribution(finalTable.residualX,100,'residualX','mm', store_folder, '', false);
+distribution(finalTable.residualY,100,'residualY','mm', store_folder, '', false);
+
+padSelect = finalTable.nActivePad > 1;
+distribution(finalTable(padSelect, :).residualX,100,'residualX_shared','mm', store_folder, '', false);
+distribution(finalTable(padSelect, :).residualY,100,'residualY_shared','mm', store_folder, '', false);
+
+spatial_folder = [store_folder '\spatialRes'];
+mkdir(spatial_folder);
+mkdir([spatial_folder '\shared']);
+mkdir([spatial_folder '\single']);
+
+resolutionStuff(finalTable,sampling_geom,spatial_folder, 'residualX', 'residualX', 'mm', 'all-events');
+resolutionStuff(finalTable,sampling_geom,spatial_folder, 'residualY', 'residualY', 'mm', 'all-events');
+
+resolutionStuff(finalTable(padSelect, :),sampling_geom,[spatial_folder '\shared'] , 'residualX', 'residualX', 'mm', 'Sharing');
+resolutionStuff(finalTable(padSelect, :),sampling_geom,[spatial_folder '\shared'], 'residualY', 'residualY', 'mm', 'Sharing');
+
+resolutionStuff(finalTable(~padSelect, :),sampling_geom,[spatial_folder '\single'] , 'residualX', 'residualX', 'mm', 'Single');
+resolutionStuff(finalTable(~padSelect, :),sampling_geom,[spatial_folder '\single'], 'residualY', 'residualY', 'mm', 'Single');
+
+clear padSelect
+
+%% pad and surroundings full study
+
+for i=1:length(padArray)
+
+    full_folder = [store_folder '\FULLPAD\pad' num2str(padArray(i))];
+    mkdir(full_folder);
+    full_maps_folder = [store_folder '\FULLPAD\pad' num2str(padArray(i)) '\maps'];
+    mkdir(full_maps_folder);
+
+    singlePadMaps(padArray(i), full_frame, finalTable, full_geom, full_maps_folder, false, 'full');
+    [~,~,~,~,~,pad.TimeWalkCorr_full{i}, pad.TimeResCorr_full{i}] = characterisePad(finalTable,padArray(i), full_folder, false, 'full');
+    
+end
+
+
+%% timewalk correction
+
+SATCorrvars = cell(length(padArray),1);
+
+%do the timewalk correction
+for i=1:length(padArray)
+
+    timewalk_folder_corr = [store_folder '\timewalk\pad' num2str(padArray(i)) '\Correction-SELECTION'];
+    mkdir(timewalk_folder_corr);
+
+    SATCorrvars{i} = [SATvars{i} '_Corr'];
+    finalTable.(SATCorrvars{i}) = finalTable.(SATvars{i}) - (twalk_fn_minuit(pad.TimeWalkCorr{i}, (finalTable.(e_peakvars{i}))'))';
+    %distribution(finalTable.(SATCorrvars{i}), 100, 'SAT-corrected', 'ns', timewalk_folder_corr, '', false);
+    
+    local_geom = pad.geoms{i};
+    local_geom.centers = pad.centers_array;
+
+    resolutionStuff(finalTable,full_geom,timewalk_folder_corr, SATCorrvars{i}, 'SAT-corrected', 'ns', ['pad' num2str(padArray(i))]);
+    resolutionStuff(finalTable,local_geom,timewalk_folder_corr, SATCorrvars{i}, 'SAT-corrected', 'ns', ['pad' num2str(padArray(i)) '-SELECTED']);
+
+end
+
+clear timewalk_folder timewalk_maps_folder
+
+
+%% merging time info
+
+dummySAT = zeros(height(finalTable),1);
+totalWeight = zeros(height(finalTable),1);
+weights = cell(4,1);
+
+e_peak_max_per_event = max(finalTable{:,e_peakvars}, [], 2, 'omitnan');
+
+for i=1:numel(padNames)
+    wActive = fillmissing(finalTable.(padNames{i}), 'constant', 0);
+
+    % weight by time resolution (1/sigma^2)
+%     WtimeRes = 1 ./ (((twalk_fn_minuit(pad.TimeResCorr{i}, (finalTable.(e_peakvars{i}))'))') .^2);
+%     wPad = fillmissing(WtimeRes, 'constant', 0);
+
+    % weight by highest charge
+    wPad = (finalTable.(e_peakvars{i}) == e_peak_max_per_event) ;
+
+    % weight by e-peak charge
+    %wPad = fillmissing(finalTable.(e_peakvars{i}), 'constant', 0);
+
+    corrSATvec = fillmissing(finalTable.(SATCorrvars{i}), 'constant', 0);
+
+    weights{i} = wActive .*  wPad; % SHOULD I CORRECT FOR THE MEAN E_PEAK CHARGE TOO???
+    dummySAT = dummySAT + weights{i} .* corrSATvec;
+    totalWeight = totalWeight + weights{i};
+end
+
+dummySAT = dummySAT ./ totalWeight;
+finalTable.SATComb = dummySAT;
+
+distribution(finalTable.SATComb,100,'SATCombined','ns', store_folder, '', true);
+padSelect = finalTable.nActivePad > 1;
+distribution(finalTable(padSelect, :).SATComb,100,'SATCombined_shared','ns', store_folder, '', true);
+
+time_folder = [store_folder '\timeResolution\MAX_E_PEAK_CORRECTED_SELECTION'];
+mkdir(time_folder);
+mkdir([time_folder '\shared']);
+mkdir([time_folder '\single']);
+
+resolutionStuff(finalTable,sampling_geom,time_folder, 'SATComb', 'SATCombined', 'ns', 'all-events');
+resolutionStuff(finalTable(padSelect, :),sampling_geom,[time_folder '\shared'], 'SATComb', 'SATCombined', 'ns', 'Sharing');
+resolutionStuff(finalTable(~padSelect, :),sampling_geom,[time_folder '\single'], 'SATComb', 'SATCombined', 'ns', 'Single');
+
+clear padSelect

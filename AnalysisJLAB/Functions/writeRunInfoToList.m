@@ -1,0 +1,11 @@
+[numbers, strings, raw] = xlsread(filename);
+lastRow = size(raw, 1);
+nextRow = lastRow + 1;
+cellReference = sprintf('A%d', nextRow);
+xlswrite(excelFullFileName, data1, 'Sheet1', cellReference);
+nextRow = nextRow + 1;
+cellReference = sprintf('A%d', nextRow);
+xlswrite(excelFullFileName, data2, 'Sheet1', cellReference);
+nextRow = nextRow + 1;
+cellReference = sprintf('A%d', nextRow);
+xlswrite(excelFullFileName, data3, 'Sheet1', cellReference);

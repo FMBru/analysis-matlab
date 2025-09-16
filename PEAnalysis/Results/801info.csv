@@ -1,0 +1,2 @@
+Mean,Mean Error Lower,Mean Error Upper,Polya Min Lower Cutoff,Polya Upper Cutoff,nbins,N init,theta init,nBar init,exceptions
+0.050039,0.0017476,0.0017476,0.0024,0.147206,20,10,2,0.01,0
