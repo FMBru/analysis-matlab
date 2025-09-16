@@ -1,0 +1,19 @@
+#run ID, Oscilloscope, DUT CH, REF CH, Detector ID (MM #), filesToAnalyse (0 is all) - add x between lines, RunDescxxxxxxxxxxxxx
+170,Pool2,4,1,1,0,FastIC-440C-275A-single-channel-test
+x
+189,Pool3,4,1,1,0,FastIC-440C-275A-multi-channel-ch0
+x
+189,Pool3,2,1,1,0,FastIC-440C-275A-multi-channel-ch1
+x
+189,Pool2,4,1,1,0,FastIC-440C-275A-multi-channel-ch4
+x
+189,Pool2,2,1,1,0,FastIC-440C-275A-multi-channel-ch5
+x
+240,Pool2,2,1,1,0,FastIC-440C-275A-multi-channel-run2-ch1
+x
+240,Pool2,4,1,1,0,FastIC-440C-275A-multi-channel-run2-ch5
+x
+240,LECROY,2,1,1,0,FastIC-440C-275A-multi-channel-run2-ch0
+x
+240,LECROY,4,1,1,0,FastIC-440C-275A-multi-channel-run2-ch4
+x

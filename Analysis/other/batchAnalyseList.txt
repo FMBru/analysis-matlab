@@ -1,0 +1,1 @@
+#run ID, Oscilloscope, DUT CH, REF CH, Detector ID (MM #), filesToAnalyse (0 is all), RunDesc, enableNoiseRej, enableFiltering, enableIon - add x between lines - example 004,Pool1,1,1,3,0,MM metal 10 mm - fast amp - 120 um - PC Ti 2p4 nm - Sealed - A275V C440V,1,1,1 -- xxxxxxxx

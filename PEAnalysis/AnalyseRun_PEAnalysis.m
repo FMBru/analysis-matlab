@@ -1,0 +1,569 @@
+close all
+
+%% histogram and polya fit
+format long; % print 15 decimals intead of 4delat
+%clear ch_tr ch_mmclose
+
+%geometric cut
+radius = 2; % 2 mm radius
+
+spacial_cut = 1;
+%% Parameters for changing
+
+shouldOutputAmplitudesTxtFile = true;
+
+shiftX = 0;
+shiftY = 0;
+
+useNaiveMeanPos = true; %if median pos extract fails, use simple mean of tracker values instead
+
+% start / end voltages for fitting
+if trackerExist == 1
+     min_v = 0.0015;
+     max_v = 0.148;
+    % bins
+    binOffset = 0;
+else
+     min_v = 0.0;
+     max_v = 0.7;
+       % bins
+    binOffset = 0;
+    
+end
+
+store_folder = ['\\eosproject-smb\eos\project\p\picosec\testbeam\2025_July_h4\Results\Run' run.id '-' run.oscilloscope '-dut' channel.id '-' runInfoString];
+%store_folder = ['\\eosproject-smb\eos\project\p\picosec\testbeam\2023_August_h4\Results\SPE\Run' run.id '\'];
+mkdir(store_folder);
+
+
+% polya starting parameters for fitting
+%x0 = [1 1 0.2];  %parameters 3LEDs test ortec   
+x0 = [1 1 0.2];   
+
+figureWidth=800;
+figureHeight=500;
+
+
+num_bins = 100;
+
+if trackerExist == 1
+
+    %sampling area for 2D maps
+    %% calculate
+    area.step = 0.25;   % set grid resolution in mm
+    area.size = 8;      % set half-size of the observed square area, mm - for
+    %pads and small MCP
+    %area.size = 20;      % set half-size of the observed square area, mm - for large MCP
+    area.radius = radius;    % set radius of averaging circular window cut, mm
+end
+
+
+%% Global cut
+if trackerExist == 1
+    glbl_cut = mm_max_y>0.00 & mm_max_y<0.95*max(mm_max_y) & trackerX' ~= 0 & trackerY' ~= 0; %remove saturated datapoints
+else
+    glbl_cut = mm_max_y>0.00 & mm_max_y<0.95*max(mm_max_y)
+end
+            
+if trackerExist == 1
+    %% Pad center
+    pad.cut_len = 8;   % move +/-8mm from median to find center
+    clear mean
+    % calculate pad center
+        pad.xc_med = median(trackerX(glbl_cut));
+        pad.yc_med = median(trackerY(glbl_cut));
+        pad.x_idx_cut = trackerX' > (pad.xc_med-pad.cut_len) & trackerX' < (pad.xc_med+pad.cut_len) & glbl_cut;
+        pad.xc_n = mean(trackerX(pad.x_idx_cut)); % naive mean for x
+        pad.y_idx_cut = trackerY' > (pad.yc_med-pad.cut_len) & trackerY' < (pad.yc_med+pad.cut_len) & glbl_cut;
+        pad.yc_n = mean(trackerY(pad.y_idx_cut)); % naive mean for y
+
+        figure(7);
+        title(['%s - Hits on DUT detector (X, Y projections) ']);
+        subplot(2,2,1);
+        pad.h_x = histogram(trackerX(pad.x_idx_cut),50);
+        subplot(2,2,4);
+        pad.h_y = histogram(trackerY(pad.y_idx_cut),50);
+        set(gca,'view',[90 -90])
+        subplot(2,2,3);
+        scatter(trackerX(glbl_cut), trackerY(glbl_cut),'.'); % plot hits with global cut
+        axis equal
+        xlim(pad.h_x.BinLimits);
+        ylim(pad.h_y.BinLimits);
+        pause(1);
+
+    % find x center from electron peak mean charge
+    for i = 1:length(pad.h_x.Values)
+        tmp_cut = trackerX>pad.h_x.BinEdges(i) & trackerX<pad.h_x.BinEdges(i)+ pad.h_x.BinWidth;
+        %tmp_cut = trackerX>pad.h_x.BinEdges(i) & trackerX<pad.h_x.BinEdges(i)+ pad.h_x.BinWidth & MM_maxy>0.3*max(MM_maxy);
+        pad.epeak_x(i) = mean(mm_max_y(tmp_cut));
+    end
+
+    figure(8);
+    fit_data = [];
+    fit_data(1,:) = pad.h_x.BinEdges(1:end-1)+pad.h_x.BinWidth/2;
+    fit_data(2,:) = pad.epeak_x;
+    % fit_data(3,:) = yerr;
+    p0=[];
+    p0(1) = pad.xc_n;
+    p0(2) = 1;
+    p0(3) = 0.01;
+    p0(4) = 0.01;
+    cmd='min; ret';
+    [p, err, chi] = fminuit('parabola4_minuit',p0,fit_data(:,1:end),'-b','-c',cmd);
+    % store pad center x
+    pad.xc = p(1);
+    pad.xc_err = err(1);
+    % plot to see how parabolic fit looks like
+    figure(10)
+    bar(fit_data(1,:),fit_data(2,:));
+    hold on
+    plot(fit_data(1,:),parabola4_minuit(p, fit_data(1,:)),'LineWidth',2);
+    xlabel('x-axis, mm');
+    ylabel('Charge, pC');
+    legend('RAW', 'Fit')
+    title_str = sprintf('%s \n E-peak mean over x-axis');
+    title(title_str)
+    grid on
+  
+
+    % find y center from electron peak mean
+    for i = 1:length(pad.h_y.Values)
+        tmp_cut = trackerY>pad.h_y.BinEdges(i) & trackerY<pad.h_y.BinEdges(i)+pad.h_y.BinWidth;
+        pad.epeak_y(i) = mean(mm_max_y(tmp_cut));
+    end
+
+    fit_data = [];
+    fit_data(1,:) = pad.h_y.BinEdges(1:end-1)+pad.h_y.BinWidth/2;
+    fit_data(2,:) = pad.epeak_y;
+    % fit_data(3,:) = yerr;
+    p0=[];
+    p0(1) = pad.yc_n;
+    p0(2) = 1;
+    p0(3) = 0.01;
+    p0(4) = 0.01;
+    cmd='min; ret';
+    [p, err, chi] = fminuit('parabola4_minuit',p0,fit_data(:,1:end),'-b','-c',cmd);
+    % store pad center y
+    pad.yc = p(1);
+    pad.yc_err = err(1);
+    % plot to see how parabolic fit looks like
+    figure(11)
+    bar(fit_data(1,:),fit_data(2,:));
+    hold on
+    plot(fit_data(1,:),parabola4_minuit(p, fit_data(1,:)),'LineWidth',2);
+    xlabel('y-axis, mm');
+    ylabel('Charge, pC');
+    legend('RAW', 'Fit')
+    title_str = sprintf('%s \n E-peak mean over y-axis');
+    title(title_str)
+
+    grid on
+         if useNaiveMeanPos 
+             pad.xc = pad.xc_n;
+             pad.yc = pad.yc_n;
+         end
+
+pad.xc = pad.xc+shiftX;
+pad.yc = pad.yc+shiftY;
+    %% Plotting
+    close all
+    spacial_cut = glbl_cut == 1 &  sqrt((trackerX'-pad.xc).^2 + (trackerY'-pad.yc).^2) < radius ;
+
+    noise_glbl_cut = noise_mm_max_y>0.00 & noise_mm_max_y<0.95*max(noise_mm_max_y);
+
+        pad.h_x = histogram(trackerX(pad.x_idx_cut),50);
+        pad.h_y = histogram(trackerY(pad.y_idx_cut),50);
+
+        figure(5);
+        title(['%s - Hits on DUT detector (X, Y projections) ']);
+        scatter(trackerX, trackerY,'.b'); % plot hits with global cut
+        hold on;
+        scatter(trackerX(spacial_cut), trackerY(spacial_cut),'.r'); % plot hits with global cut
+        axis equal
+        %xlim(pad.h_x.BinLimits);
+        %ylim(pad.h_y.BinLimits);
+        pause(1);
+        movegui(gcf,'north');
+        saveas(figure(5),[store_folder 'RUN' run.id ' - Channel' channel.id '-  Hits on DUT detector (X, Y projections).png'])
+
+else
+    spacial_cut = glbl_cut;
+end 
+
+
+
+figure(1)
+x_fig=10;
+y_fig=10;
+set(gcf,'position',[x_fig,y_fig,figureWidth,figureHeight]);
+h=histogram(mm_max_y(spacial_cut),num_bins);
+set(gca, 'YScale', 'log') %plot on log scale
+movegui(gcf,'south');
+hold on
+xlabel('Signal amplitude, V');
+ylabel('Events');
+%ylim([0.5 max(h.Values)+1000]);
+ax = gca;
+ax.FontSize = 20;
+if trackerExist == 1
+   % xlim([-0.005 0.3]);
+else
+    %xlim([-0.005 0.1]);
+end
+grid on
+if trackerExist == 1
+    title_str = sprintf('PICOSEC beam test - Run %s - Max e-peak amplitude', run.id);
+else
+    title_str = sprintf('PICOSEC LED test - Run %s - Max e-peak amplitude', run.id);
+end
+title(title_str)
+
+% set the upper and lower bounds for the lower cutoff of the polya fit that
+% we would like to try
+min_lower = 3e-3;
+%min_upper = 3.5e-3;
+
+% If min and max for fit are not within dataset range pick edges of dataset
+if (min(h.BinEdges) > min_lower)
+    min_lower = min(h.BinEdges);
+end
+if (max(h.BinEdges(1:num_bins)) < max_v)
+    max_v = max(h.BinEdges(1:num_bins)); % cut the last bin edge because it's on the right side of the bin to make array lengths match
+end
+%max_v = max(h.BinEdges(1:num_bins));
+
+
+% min cut value should be the closest value to min_lower that is greater than
+% min_v
+[min_cut_val,min_cut_idx] = min(abs(h.BinEdges-min_v));
+if (min_cut_val >= min_v)
+else
+    min_cut_idx=min_cut_idx+1;
+end
+[diff,cutUp_idx] = min(abs(h.BinEdges-max_v));
+cutUp_val = h.BinEdges(cutUp_idx);
+if (cutUp_val <= max_v)
+else
+    cutUp_idx=cutUp_idx-1;
+end
+
+% array of starting voltages is the first n_bins starting with
+min_arr = h.BinEdges(min_cut_idx:min_cut_idx+binOffset);
+
+% initialize arrays
+mean_arr = [];
+chi2_arr = [];
+
+% take upper cut as very end of array
+%cutUp_idx = length(h.Values);
+
+% count exceptions
+exceptionCounter = 0;
+
+% initialize error array
+mean_err_arr = [];
+
+% colors for plotting
+colors = distinguishable_colors(binOffset+1);
+c = 1;
+P = ["N","theta","nBar"];
+
+for i=1:length(min_arr)
+    cut_idx = min_cut_idx+i-1; 
+    %cut_idx = 3;
+    %cutUp_idx = 100;
+    % define polya
+    fitfun = fittype( @(N,theta,nBar,x) (N./nBar).*((theta+1).^(theta+1)).*((x./nBar).^theta).*exp(-(theta+1).*x./nBar)./gamma(theta+1));
+
+    options = fitoptions(fitfun);
+    options.Upper = [100 100 1];
+    options.Lower = [0 0 0];
+    options.StartPoint = x0;
+    
+    try
+        [fitted_curve,gof] = fit(h.BinEdges(cut_idx:cutUp_idx)',h.Values(cut_idx:cutUp_idx)',fitfun,options)
+    catch exception
+        exceptionCounter = exceptionCounter+1;
+        mean_arr(i) = 0;
+        chi2_arr(i) = 0;
+        mean_err_arr(i,:) = [0;0];
+        continue
+    end
+    
+    P = [P;fitted_curve.N,fitted_curve.theta,fitted_curve.nBar];
+
+
+    % plot the fitted curve
+    if (fitted_curve.theta > 0)
+        hold on
+        plot(h.BinEdges(cut_idx:cutUp_idx),fitted_curve(h.BinEdges(cut_idx:cutUp_idx)+h.BinWidth/2),'LineWidth',3,'Color',[colors(c,:)])
+        % used color, increment color counter
+
+        % calculate chi squared and degrees of freedom
+        ch2 = sum(((h.Values(cut_idx:cutUp_idx)-fitted_curve(h.BinEdges(cut_idx:cutUp_idx))').^2)./fitted_curve(h.BinEdges(cut_idx:cutUp_idx))');
+        dof = size(h.Values(cut_idx:cutUp_idx),2)-3;
+        nch2 = ch2/dof
+        np = 1-chi2cdf(ch2,dof) % P(\chi^2>ch2)
+    
+        mean_arr(i) = fitted_curve.nBar;
+        chi2_arr(i) = nch2;
+        mean_err = confint(cfit(fitted_curve),0.68);
+        mean_err_arr(i,:) = mean_err(:,3);
+        
+        c = c+1;
+    else
+        exceptionCounter = exceptionCounter+1;
+        mean_arr(i) = 0;
+        chi2_arr(i) = 0;
+        mean_err_arr(i,:) = [0;0];
+    end
+ 
+end
+
+% print out file with params
+% filename = [run.id, 'optParams.csv'];
+% filedir = ['C:\Users\GDD\Documents\MATLAB\Picosec\SPEAnalysisPolyaMeanFinalVersion2\',filename];
+% writematrix(P,filename);
+% fileattrib(filedir,'+w','a');
+% annotate and label plot
+%text(min(h.BinEdges)+0.02*max(h.BinEdges),max(h.Values)+2,'\chi^2/dof = '+string(round(ch2)) + '/' + string(size(h.Values(cut_idx:cutUp_idx),2)) + ' = ' + string(nch2),'FontSize',14)
+%text();
+
+
+
+
+
+
+
+%% calculate the final mean from all means
+format shortE
+% mean
+% remove 0s which correspond to fits that threw exceptions, do not want 0s
+% biasing the mean
+filter = mean_arr ~= 0;
+mean_arr = mean_arr(filter);
+chi2_arr = chi2_arr(filter);
+mean_err_arr_temp = mean_err_arr(filter,:);
+mean_err_arr = mean_err_arr_temp;
+min_arr = min_arr(filter);
+meanCalculated = sum(mean_arr)/length(mean_arr);
+
+%error propagation
+delta_arr(1) = (1/2)*(sum((mean_err_arr(:,1)'-mean_arr).^2))^(1/2); % lower
+delta_arr(2) = (1/2)*(sum((mean_err_arr(:,2)'-mean_arr).^2))^(1/2); % upper
+
+% print values
+%str = sprintf('Mean: %f \n Upper bound: %f \n Lower bound: %f',mean,mean+delta_arr(2),mean-delta_arr(1));
+%display(str);
+
+str1 = sprintf('Mean = %0.5f +/- %0.5f',meanCalculated,delta_arr(2));
+annotation('textbox',[.50 .6 .35 .3], 'String',str1,'FitBoxToText','on','FontSize',18);
+saveas(figure(1),[store_folder 'RUN' run.id ' - Channel' channel.id '- E-PeakAmplitude.png'])
+
+%% plot the chi2, mean and error in the mean
+
+hold off;
+figure(2)
+x_fig=10;
+y_fig=10;
+set(gcf,'position',[x_fig,y_fig,figureWidth,figureHeight]);
+movegui(gcf,'northwest');
+
+%plot(min_arr,chi2_arr, 'Marker','o','Color',[colors(:)]);
+scatter(min_arr,chi2_arr,35,[colors(1:c-1,:)],'filled');
+title('\chi^2/DOF vs Polya Mean');
+xlabel('nBar [V]');
+ylabel('\chi^2/DOF');
+ax = gca;
+ax.FontSize = 20;
+grid on;
+saveas(figure(2),[store_folder 'RUN' run.id ' - Channel' channel.id '- MeanVsChi2.png'])
+
+
+figure(3)
+x_fig=10;
+y_fig=10;
+set(gcf,'position',[x_fig,y_fig,figureWidth,figureHeight]);
+%movegui(gcf,'e');
+
+hold on;
+
+for i = 1:length(min_arr)
+    e = errorbar(min_arr(i),mean_arr(i),abs(mean_arr(i)-mean_err_arr(i,1)'),abs(mean_arr(i)-mean_err_arr(i,2)'),'Marker','o','Color',[colors(i,:)]);
+    e.LineWidth = 1;
+end
+
+title('Polya Mean vs Lower Cutoff Voltage');
+ylabel('nBar [V]');
+xlabel('Lower Polya Cutoff [V]');
+ax = gca;
+ax.FontSize = 20;
+grid on;
+saveas(figure(3),[store_folder 'RUN' run.id ' - Channel' channel.id '- MeanVsCutoffError.png'])
+movegui(gcf,'northwest');
+
+hold off;
+
+
+%% hist to bg level
+figure(4)
+x_fig=10;
+y_fig=10;
+set(gcf,'position',[x_fig,y_fig,figureWidth,figureHeight]);
+h=histogram(mm_bgLevel(spacial_cut),num_bins)
+set(gca, 'YScale', 'log') %plot on log scale
+movegui(gcf,'northeast');
+hold on
+xlabel('BG Mean, V');
+ylabel('Events');
+ax.FontSize = 20;
+xlim([-0.02 0.02]);
+
+grid on;
+saveas(figure(4),[store_folder 'RUN' run.id ' - Channel' channel.id '- BGLevel.png'])
+hold off;
+
+%% hist to bg level
+figure(5)
+x_fig=10;
+y_fig=10;
+set(gcf,'position',[x_fig,y_fig,figureWidth,figureHeight]);
+h=histogram(mm_bgRMS(spacial_cut),num_bins)
+set(gca, 'YScale', 'log') %plot on log scale
+movegui(gcf,'east');
+hold on
+xlabel('BG RMS, V');
+
+xlim([0.0 0.005]);
+ylabel('Events');
+ax.FontSize = 20;
+grid on;
+saveas(figure(5),[store_folder 'RUN' run.id ' - Channel' channel.id '- BGRMS.png'])
+hold off;
+
+
+if trackerExist == 1
+
+area.x_vec =-area.size:area.step:area.size+area.step;    % define area of interest for 2D plots in X axis
+area.y_vec =-area.size:area.step:area.size+area.step;    % define area of interest for 2D plots in X axis
+
+% move rectangle to pad center
+area.x_vec = area.x_vec + pad.xc - area.step/2;
+area.y_vec = area.y_vec + pad.yc - area.step/2;
+
+% ndgrid plot
+[area.xx, area.yy] = ndgrid(area.x_vec, area.y_vec);
+area.amp = zeros(length(area.x_vec),length(area.y_vec));
+for i=1:length(area.x_vec)
+    i;
+    for j=1:length(area.y_vec)
+        j;
+        % make moving circular cut that respects the global cut (idx_cut)
+        %area.x_vec(i)
+        %area.y_vec(j)
+        cut_circ = ((trackerX' - area.x_vec(i)).^2 + (trackerY' - area.y_vec(j)).^2) < area.radius^2 & glbl_cut;
+        selectedEventVec = mm_max_y(cut_circ);
+        area.amp(i,j) = mean(mm_max_y(cut_circ));
+    end
+end
+
+
+
+
+
+%% plot DUT amplitude over area
+figure(4)
+h=pcolor(area.xx,area.yy,area.amp);
+hold on
+%rectangle('Position',[pad.xc-pad.size/2 pad.yc-pad.size/2 pad.size pad.size],  'Curvature',pad.curvature,'LineWidth',2);
+rectangle('Position',[pad.xc-(2*radius)/2 pad.yc-(2*radius)/2 (2*radius) (2*radius)], 'Curvature',[1,1], 'LineWidth',2,'EdgeColor','red');    %plot selected area
+set(h, 'EdgeColor', 'none');
+axis equal
+colorbar
+xlabel('x-axis, mm');
+ylabel('y-axis, mm');
+h = colorbar;
+h.Label.String = 'Amplitude, V';
+h.Label.Position(1) = 3;
+str_title = sprintf('DUT MM map (\\phi_{avg} = %2.1f mm)', 2*area.radius);
+title(str_title);
+movegui(gcf,'west');
+set(h, 'EdgeColor', 'none');
+
+saveas(figure(4),[store_folder 'RUN' run.id ' - Channel' channel.id ' - DUT_amp.png'])
+
+end
+
+
+% %%overlap with pyroot selection
+% M = dlmread('C:\Users\GDD\Documents\MATLAB\Picosec\PEAnalysis\Experimental\run163_pyroot.csv',';',1,8)
+% M = M(M~=0);
+% 
+% figure(6)
+% x_fig=10;
+% y_fig=10;
+% set(gcf,'position',[x_fig,y_fig,figureWidth,figureHeight]);
+% h=histogram(M,num_bins)
+% hold on
+% h=histogram(mm_max_y(spacial_cut),num_bins)
+% set(gca, 'YScale', 'log') %plot on log scale
+% movegui(gcf,'south');
+% hold on
+% xlabel('Signal amplitude, V');
+% ylabel('Events');
+% ylim([0.5 max(h.Values)+1000]);
+% ax = gca;
+% ax.FontSize = 20;
+% if trackerExist == 1
+%    % xlim([-0.005 0.3]);
+% else
+%     %xlim([-0.005 0.1]);
+% end
+% grid on
+% if trackerExist == 1
+%     title_str = sprintf('PICOSEC beam test - Run %s - Max e-peak amplitude',run.id);
+% else
+%     title_str = sprintf('PICOSEC LED test - Run %s - Max e-peak amplitude',run.id);
+% end
+% title(title_str)
+
+
+
+%if shouldOutputAmplitudesTxtFile
+%%% store tabular data
+%txt_tab.names = {'mm_max_y'};
+%fid = fopen([store_folder '/Run' run.id '_tabular.txt'],'w');
+% print header with names
+%for i=1:length(txt_tab.names)
+ %   fprintf(fid,'%s\t',txt_tab.names{i});
+%end
+%fprintf(fid,'\n');
+%for k=1:length(mm_max_y)
+ %   fprintf(fid,'%.6f\t\n', mm_max_y);
+%end
+%fclose(fid);
+%end
+
+
+% figure(4)
+% plot(min_arr,mean_arr,'ob');
+% title('Polya Mean vs Lower Cutoff Voltage');
+% ylabel('nBar [V]');
+% xlabel('Lower Polya Cutoff [V]');
+% saveas(figure(4),[run.id, 'MeamVsCutoff.png']);
+
+
+% %% save some parameters to a csv file
+% A = ["Mean","Mean Error Lower","Mean Error Upper","Polya Min Lower Cutoff","Polya Upper Cutoff","nbins","N init","theta init","nBar init","exceptions"];
+% vars = [mean,delta_arr(1),delta_arr(2),min_v,max_v,n_bins,x0(1),x0(2),x0(3),exceptionCounter];
+% A = [A;vars];
+% %filename = ['info.csv'];
+% %filedir = ['C:\Users\GDD\Documents\MATLAB\Picosec\SPEAnalysisPolyaMeanFinalVersion\', filename];
+% %filedir = ['C:\Users\Michaela\Documents\4th Year\CERN\MATLAB\SinglePEAnalysisPolyaMean\',filename];
+% %writematrix(A,filename);
+% %fileattrib(filedir,'+w','a');
+% %saveas(figure(4),[store_folder 'RUN' run.id ' - Channel' channel.id ' - ' filename]);
+% 
+% mean
+% strcat('Upper Bound = ',num2str(mean+delta_arr(2)))
+% strcat('Lower Bound = ',num2str(mean-delta_arr(1)))

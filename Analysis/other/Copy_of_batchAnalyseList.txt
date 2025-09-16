@@ -1,0 +1,12 @@
+#run ID, Oscilloscope, DUT CH, REF CH, Detector ID (MM #), filesToAnalyse (0 is all) - add x between lines, RunDescxxxxxxxx, enableNoiseRej, enableFiltering
+0707_Ti_C100_A275_C470_20mV_20ns_highStat,Pool1,1,0,1,100,xx,0,0
+x
+0707_Ti_C100_A275_C470_20mV_20ns_highStat,Pool1,1,0,1,100,xx,1,0
+x
+0707_Ti_C100_A275_C470_20mV_20ns_highStat,Pool1,1,0,1,100,xx,1,1
+x
+0707_Ti_C100_A275_C470_50mV_20ns_highStat,Pool1,1,0,1,100,xx,0,0
+x
+0707_Ti_C100_A275_C470_50mV_20ns_highStat,Pool1,1,0,1,100,xx,1,0
+x
+0707_Ti_C100_A275_C470_50mV_20ns_highStat,Pool1,1,0,1,100,xx,1,1

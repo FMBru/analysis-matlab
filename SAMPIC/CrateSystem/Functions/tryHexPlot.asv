@@ -1,0 +1,15 @@
+
+
+colorMap = colormap;
+
+channelsEnabled = 1:110;
+                            colorMapEntry = colorMap(50,:)
+                            
+
+close all
+hexagon(1,0,0,[colorMapEntry(1) colorMapEntry(2) colorMapEntry(3)])
+axis equal
+dataArray
+VisualiseMultipad (channelsEnabled,dataArray,"Uniformity map",plotPath,"Amp",plottingString,minC,maxC)
+
+

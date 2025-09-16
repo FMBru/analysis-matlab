@@ -1,0 +1,317 @@
+%clear all
+close all
+
+%load input file
+%in_file = 'C:\Users\GDD\Documents\Picosec\May22\Analysed\Run0123-GDD.mat';
+
+
+%%configuration
+twalk.en = 0;                                   % enable timewalk correction
+determineSAT = 1
+
+% center resolution circular - radius
+small.r = 2; %used for only circle
+medium.r = 2.5; %used for ring only
+
+%shift sampling point for time res relative to pad center determined by
+%alignmnet
+%account for misalignment
+shiftX = 0;
+shiftY = 0;
+
+alignToDUT = true; %if false, alignment to REF MCP
+
+%use fit of amplitude to center sampling area
+shouldCenterPadWithFit = false;
+
+%pad size (visualisation)
+pad.size = 10;     % MCP size in mm - Hamamatsu
+%pad.size = 12;     % MCP size in mm - Planacon, 2x2 central pads
+pad.cut_len = 8;   % move +/-8mm from median to find center
+pad.isCircle = 0;   %plotting round if circle, otherwise square
+
+%DUT index: 2: MM3 (VacChamber), 3: MM1(Multipad), 4: MM2 (on support plate), 5: MM4 (electron setup)
+if tracker.dutIndex == 2
+    pad.isCircle = 1;
+elseif tracker.dutIndex == 3
+    pad.isCircle = 0;
+elseif tracker.dutIndex == 4
+    pad.isCircle = 1;
+elseif tracker.dutIndex == 5
+    pad.isCircle = 1;
+end 
+
+%for planacon
+%pad.size = 25;     % MCP size in mm - Hamamatsu
+%pad.cut_len = 25;   % move +/-8mm from median to find center
+%pad.isCircle = 0;   %plotting round if circle, otherwise square
+
+
+%sampling area for 2D maps
+%% calculate
+area.step = 0.25;   % set grid resolution in mm
+%area.size = 8;      % set half-size of the observed square area, mm - for
+%pads and small MCP
+area.size = 20;      % set half-size of the observed square area, mm - for large MCP
+area.radius = 1;    % set radius of averaging circular window cut, mm
+
+
+%load(in_file);
+
+runID = str2num(run.id);
+
+addpath 'C:\Users\GDD\Documents\MATLAB\Picosec\SCP'
+connObj  =  ssh2_config('lxplus.cern.ch','gdd','Win_Admin',22);
+%download matlab run data file
+dataFileLocal='C:\Users\GDD\Documents\Picosec\May22\MatlabRunData';
+dataFilePath = append('/eos/project/p/picosec/testbeam/2022_May_h4/info/MatlabRunInfo');
+runDataFileName=append('RunData',string(runID),'.mat');
+dataFileLocalPath = append(dataFileLocal,'\',runDataFileName);
+% ssh2_struct = scp_get(connObj, convertStringsToChars(runDataFileName), convertStringsToChars(dataFileLocal), convertStringsToChars(dataFilePath))
+
+
+%load(dataFileLocalPath);
+
+
+%finish config
+pad.curvature = [1,1]; %circle
+if pad.isCircle == 0
+    pad.curvature = [0,0]; %rect
+end
+
+
+
+
+
+
+
+
+time_avg_raw = median(time_diff_sigmoidDUT);  % assume mu from the median vaule
+time_min = time_avg_raw - 5;     % predicted resolution 100ps cut 3 sigma
+time_max = time_avg_raw + 5;     % left and 3 sigma right from median
+
+
+%with tracker
+glbl_cut = time_diff_sigmoidDUT>time_min & time_diff_sigmoidDUT<time_max & ...
+    MCP_maxyDUT>0.01*max(MCP_maxyDUT) & MM_maxyDUT>0.01*max(MM_maxyDUT)&...
+    MM_maxyDUT<0.95*max(MM_maxyDUT)& MCP_maxyDUT<0.95*max(MCP_maxyDUT) & ...
+    trackerXDUT~=0 & trackerYDUT~=0;
+
+
+if alignToDUT == true
+    
+    % calculate pad center
+    pad.xc_med = median(trackerXDUT(glbl_cut));
+    pad.yc_med = median(trackerYDUT(glbl_cut));
+    pad.x_idx_cut = trackerXDUT > (pad.xc_med-pad.cut_len) & trackerXDUT < (pad.xc_med+pad.cut_len) & glbl_cut;
+    pad.xc_n = mean(trackerXDUT(pad.x_idx_cut)); % naive mean for x
+    pad.y_idx_cut = trackerYDUT > (pad.yc_med-pad.cut_len) & trackerYDUT < (pad.yc_med+pad.cut_len) & glbl_cut;
+    pad.yc_n = mean(trackerYDUT(pad.y_idx_cut)); % naive mean for y
+    
+    % Plot x and y hit histograms
+    figure;
+    title(['Hits on DUT detector (X, Y projections)' run.name]);
+    subplot(2,2,1);
+    pad.h_x = histogram(trackerXDUT(pad.x_idx_cut),50);
+    subplot(2,2,4);
+    pad.h_y = histogram(trackerYDUT(pad.y_idx_cut),50);
+    set(gca,'view',[90 -90])
+    subplot(2,2,3);
+    scatter(trackerXDUT(glbl_cut), trackerYDUT(glbl_cut),'.'); % plot hits with global cut
+    axis equal
+    xlim(pad.h_x.BinLimits);
+    ylim(pad.h_y.BinLimits);
+    
+    saveas(gcf,[store_folder '\Run' run.id '_hits_DUT.png'])
+    
+    % find x center from electron peak mean charge
+    for i = 1:length(pad.h_x.Values)
+        tmp_cut = trackerXDUT>pad.h_x.BinEdges(i) & trackerXDUT<pad.h_x.BinEdges(i)+ pad.h_x.BinWidth;
+        pad.epeak_x(i) = mean(e_peak_MM(tmp_cut));
+    end
+    
+    fit_data = [];
+    fit_data(1,:) = pad.h_x.BinEdges(1:end-1)+pad.h_x.BinWidth/2;
+    fit_data(2,:) = pad.epeak_x;
+    % fit_data(3,:) = yerr;
+    p0=[];
+    p0(1) = pad.xc_n;
+    p0(2) = 1;
+    p0(3) = 0.01;
+    p0(4) = 0.01;
+    cmd='min; ret';
+    [p, err, chi] = fminuit('parabola4_minuit',p0,fit_data(:,1:end),'-b','-c',cmd);
+    % store pad center x
+    pad.xc = p(1);
+    pad.xc_err = err(1);
+    % plot to see how parabolic fit looks like
+    figure
+    bar(fit_data(1,:),fit_data(2,:));
+    hold on
+    plot(fit_data(1,:),parabola4_minuit(p, fit_data(1,:)),'LineWidth',2);
+    xlabel('x-axis, mm');
+    ylabel('Charge, pC');
+    legend('RAW', 'Fit')
+    title(['E-peak mean over x-axis ' run.name]);
+    grid on
+    
+    
+    % find y center from electron peak mean
+    for i = 1:length(pad.h_y.Values)
+        tmp_cut = trackerYDUT>pad.h_y.BinEdges(i) & trackerYDUT<pad.h_y.BinEdges(i)+pad.h_y.BinWidth;
+        pad.epeak_y(i) = mean(e_peak_MM(tmp_cut));
+    end
+    
+    fit_data = [];
+    fit_data(1,:) = pad.h_y.BinEdges(1:end-1)+pad.h_y.BinWidth/2;
+    fit_data(2,:) = pad.epeak_y;
+    % fit_data(3,:) = yerr;
+    p0=[];
+    p0(1) = pad.yc_n;
+    p0(2) = 1;
+    p0(3) = 0.01;
+    p0(4) = 0.01;
+    cmd='min; ret';
+    [p, err, chi] = fminuit('parabola4_minuit',p0,fit_data(:,1:end),'-b','-c',cmd);
+    % store pad center y
+    pad.yc = p(1);
+    pad.yc_err = err(1);
+    % plot to see how parabolic fit looks like
+    figure
+    bar(fit_data(1,:),fit_data(2,:));
+    hold on
+    plot(fit_data(1,:),parabola4_minuit(p, fit_data(1,:)),'LineWidth',2);
+    xlabel('y-axis, mm');
+    ylabel('Charge, pC');
+    legend('RAW', 'Fit')
+    title(['E-peak mean over y-axis ' run.name]);
+    grid on
+    
+    
+    if shouldCenterPadWithFit==false
+        pad.xc = pad.xc_n;
+        pad.yc = pad.yc_n;
+    end
+end
+
+%% calculate REF MCP centre
+
+if alignToDUT == false
+    
+    % calculate pad center
+    pad.xc_med = median(trackerXDUT(glbl_cut));
+    pad.yc_med = median(trackerYDUT(glbl_cut));
+    pad.x_idx_cut = trackerXDUT > (pad.xc_med-pad.cut_len) & trackerXDUT < (pad.xc_med+pad.cut_len) & glbl_cut;
+    pad.xc_n = mean(trackerXDUT(pad.x_idx_cut)); % naive mean for x
+    pad.y_idx_cut = trackerYDUT > (pad.yc_med-pad.cut_len) & trackerYDUT < (pad.yc_med+pad.cut_len) & glbl_cut;
+    pad.yc_n = mean(trackerYDUT(pad.y_idx_cut)); % naive mean for y
+    
+    % Plot x and y hit histograms
+    figure;
+    title(['Hits on REF detector (X, Y projections)' run.name]);
+    subplot(2,2,1);
+    pad.h_x = histogram(trackerXDUT(pad.x_idx_cut),50);
+    subplot(2,2,4);
+    pad.h_y = histogram(trackerYDUT(pad.y_idx_cut),50);
+    set(gca,'view',[90 -90])
+    subplot(2,2,3);
+    scatter(trackerXDUT(glbl_cut), trackerYDUT(glbl_cut),'.'); % plot hits with global cut
+    axis equal
+    xlim(pad.h_x.BinLimits);
+    ylim(pad.h_y.BinLimits);
+    
+    saveas(gcf,[store_folder '\Run' run.id '_hits_REF.png'])
+    
+    % find x center from electron peak mean charge
+    for i = 1:length(pad.h_x.Values)
+        tmp_cut = trackerXDUT>pad.h_x.BinEdges(i) & trackerXDUT<pad.h_x.BinEdges(i)+ pad.h_x.BinWidth;
+        pad.epeak_x_mcp(i) = mean(e_peak_MCP(tmp_cut));
+    end
+    
+    fit_data = [];
+    fit_data(1,:) = pad.h_x.BinEdges(1:end-1)+pad.h_x.BinWidth/2;
+    fit_data(2,:) = pad.epeak_x_mcp;
+    % fit_data(3,:) = yerr;
+    p0=[];
+    p0(1) = pad.xc_n;
+    p0(2) = 1;
+    p0(3) = 0.01;
+    p0(4) = 0.01;
+    cmd='min; ret';
+    [p, err, chi] = fminuit('parabola4_minuit',p0,fit_data(:,1:end),'-b','-c',cmd);
+    % store pad center x
+    pad.xc = p(1);
+    fitResultX = p(1)
+    p
+    pad.xc_err = err(1);
+    % plot to see how parabolic fit looks like
+    figure
+    bar(fit_data(1,:),fit_data(2,:));
+    hold on
+    plot(fit_data(1,:),parabola4_minuit(p, fit_data(1,:)),'LineWidth',2);
+    xlabel('x-axis, mm');
+    ylabel('Charge, pC');
+    legend('RAW', 'Fit')
+    title(['E-peak REF MCP mean over x-axis ' run.name]);
+    grid on
+    
+    
+    % find y center from electron peak mean
+    for i = 1:length(pad.h_y.Values)
+        tmp_cut = trackerYDUT>pad.h_y.BinEdges(i) & trackerYDUT<pad.h_y.BinEdges(i)+pad.h_y.BinWidth;
+        pad.epeak_y_mcp(i) = mean(e_peak_MCP(tmp_cut));
+    end
+    
+    fit_data = [];
+    fit_data(1,:) = pad.h_y.BinEdges(1:end-1)+pad.h_y.BinWidth/2;
+    fit_data(2,:) = pad.epeak_y_mcp;
+    % fit_data(3,:) = yerr;
+    p0=[];
+    p0(1) = pad.yc_n;
+    p0(2) = 1;
+    p0(3) = 0.01;
+    p0(4) = 0.01;
+    cmd='min; ret';
+    [p, err, chi] = fminuit('parabola4_minuit',p0,fit_data(:,1:end),'-b','-c',cmd);
+    % store pad center y
+    pad.yc = p(1);
+    
+    fitResultX = p(1);
+    p;
+    pad.yc_err = err(1);
+    % plot to see how parabolic fit looks like
+    figure
+    bar(fit_data(1,:),fit_data(2,:));
+    hold on
+    plot(fit_data(1,:),parabola4_minuit(p, fit_data(1,:)),'LineWidth',2);
+    xlabel('y-axis, mm');
+    ylabel('Charge, pC');
+    legend('RAW', 'Fit')
+    title(['E-peak REF MCP mean over y-axis ' run.name]);
+    grid on
+    
+    %pad.xc = pad.xc_n;
+    %pad.yc = pad.yc_n;
+    
+end
+
+if isnan(pad.xc)
+    pad.xc=25;
+end
+
+if isnan(pad.yc)
+    pad.yc=25;
+end
+
+
+%%sampling in small area
+
+%circular cut_small - sampling in center
+cut_sampling = (((trackerXDUT - pad.xc-shiftX).^2 + (trackerYDUT - pad.yc-shiftY).^2) < small.r^2) & glbl_cut;
+
+%ring-shaped cut small
+%cut_small = (((trackerXDUT - pad.xc).^2 + (trackerYDUT - pad.yc).^2) > small.r^2) & (((trackerXDUT - pad.xc).^2 + (trackerYDUT - pad.yc).^2) < medium.r^2) & glbl_cut;
+
+time_avg_raw = median(time_diff_sigmoidDUT(cut_sampling));
+
+close all

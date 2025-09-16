@@ -1,0 +1,10 @@
+#run ID, Oscilloscope, DUT CH, REF CH, Detector ID (MM #), filesToAnalyse (0 is all)xxxx - add x between linesxxxxxxxxxxxx
+30,Pool2,2,1,2,0
+x
+36,Pool2,2,1,2,0
+x
+36,Pool2,4,1,2,0
+x
+37,Pool2,2,1,2,0
+x
+37,Pool2,4,1,2,0

@@ -1,0 +1,1 @@
+#run ID, Oscilloscope, DUT CH, REF CH, Detector ID (MM #), filesToAnalyse (0 is all) - add x between lines, Marta's way of naming: 051,Pool3,2,1,4,0,MM res 15 mm 200kOhm - 120 um - PC Ti 2p4 nm - Flushing - A275V C490V  xxxxxxxxxxx
